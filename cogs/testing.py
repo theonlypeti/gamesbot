@@ -1,57 +1,89 @@
 import nextcord as discord
 from nextcord.ext import commands
+from utils.mentionCommand import mentionCommand
+import asyncio
+from functools import wraps
+from typing import Optional, Iterable, Callable
 
-TESTSERVER = (957469186798518282,) #Replace with your server id
-#commands in this file will only show up in your server that you specify here
+TESTSERVER = (860527626100015154,)
 
 
 class Testing(commands.Cog):
     def __init__(self, client, baselogger):
         global logger
         logger = baselogger.getChild(f"{__name__}Logger")
-        self.client = client
-        if TESTSERVER[0] == 957469186798518282: #default check, ignore this if you changed it already
-            logger.warning("in cogs/testing.py replace the server id to your server's id for the testing commands to show up, then you can delete this line.")
+        self.client: discord.Client = client
 
-    class Testvw(discord.ui.View):
-        def __init__(self, user: discord.Member):
-            self.msg = None
-            self.user = user
-            super().__init__(timeout=30)
+    @discord.slash_command(name="testing",guild_ids=TESTSERVER)
+    async def testinggrp(self, interaction: discord.Interaction):
+        pass
 
-        @discord.ui.button(label="test")
-        async def test(self, button, interaction):
-            logger.info("button pressed")
-            button.style = discord.ButtonStyle.green
-            await self.msg.edit(view=self)
+    @testinggrp.subcommand(name="one")
+    async def onetest(self, interaction: discord.Interaction):
+        # await interaction.send("hi")
+        pass
 
-        async def on_timeout(self) -> None:
-            logger.info("view timeouted, noone pressed it in time")
-            self.children[0].disabled = True
-            await self.msg.edit(view=self)
+    @testinggrp.subcommand(name="two")
+    async def onetesttwo(self, interaction: discord.Interaction):
+        await interaction.send("hi")
 
-        async def interaction_check(self, interaction: discord.Interaction) -> bool:
-            """if this button is not pressed by the command caller, it won't work."""
-            return interaction.user == self.user
+    @onetest.subcommand(name="three")
+    async def threetest(self, interaction: discord.Interaction):
+        await interaction.send("hi")
 
-    class TextInputModal(discord.ui.Modal):
-        def __init__(self):
-            super().__init__(title="Testing")
-            self.inputtext = discord.ui.TextInput(label="Say something", required=False)
-            self.add_item(self.inputtext)
+    @discord.slash_command(name="run", description="For running python code",guild_ids=TESTSERVER)
+    async def run(self, ctx: discord.Interaction, command):
+        if "@" in command and ctx.user.id != 617840759466360842:
+            await ctx.send("oi oi oi we pinging or what?")
+            return
+        if any((word in command for word in ("open(", "os.", "eval(", "exec("))) and ctx.user.id != 617840759466360842:
+            await ctx.send("oi oi oi we hackin or what?")
+            return
+        elif "redditapi" in command and ctx.user.id != 617840759466360842:
+            await ctx.send("Lol no sorry not risking anyone else doing stuff with MY reddit account xDDD")
+            return
+        try:
+            await ctx.response.defer()
+            a = eval(command)
+            await ctx.send(a)
+        except Exception as a:
+            await ctx.send(f"{a}")
 
-        async def callback(self, interaction: discord.Interaction):
-            await interaction.response.defer()
-            await interaction.send(f"{interaction.user} says {self.inputtext.value}")
 
-    @discord.slash_command(name="testingvw", description="testing", guild_ids=TESTSERVER)
-    async def testing(self, ctx: discord.Interaction):
-        viewObj = self.Testvw(ctx.user)
-        viewObj.msg = await ctx.send(content="Hello", view=viewObj, tts=True)
 
-    @discord.slash_command(name="modaltesting", description="testing", guild_ids=TESTSERVER)
-    async def modaltesting(self, ctx):
-        await ctx.response.send_modal(self.TextInputModal())
+    def lobby(
+        self,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        *,
+        name_localizations = None,
+        description_localizations= None,
+        guild_ids: Optional[Iterable[int]] = None,
+        dm_permission: Optional[bool] = None,
+        default_member_permissions = None,
+        force_global: bool = False,
+    ):
+
+        @wraps(func)
+        def decorator(func: Callable):
+            result = discord.slash_command(
+                name=name,
+                name_localizations=name_localizations,
+                description=description or "Sanyi",
+                description_localizations=description_localizations,
+                guild_ids=guild_ids,
+                dm_permission=dm_permission,
+                default_member_permissions=default_member_permissions,
+                force_global=force_global,
+            )(func)
+            self.client._application_commands_to_add.add(result)
+            return result
+
+        return decorator
+
+# @lobby(name="sanyi")
+# async def makelobby(interaction: discord.Interaction):
+#     await interaction.send("hi")
 
 
 def setup(client, baselogger):
