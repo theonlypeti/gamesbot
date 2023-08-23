@@ -1,17 +1,13 @@
 from __future__ import annotations
 import os
 from utils.antimakkcen import antimakkcen
-import string
 from typing import Optional
 import nextcord as discord
 import nextcord.errors
 from nextcord.ext import commands
-import asyncio
 import json
-from datetime import datetime, date, timedelta
 import emoji
-from random import randint, choice, choices, shuffle
-from copy import deepcopy
+from random import randint, choice
 from collections import defaultdict
 from utils.mentionCommand import mentionCommand
 from utils.paginator import Paginator
@@ -19,14 +15,14 @@ from utils import embedutil
 
 root = os.getcwd()
 
-class LobbyCog(commands.Cog):
+class WikiGameCog(commands.Cog):
     def __init__(self, client1: discord.Client, baselogger):
         global logger
         global client
         client = client1 #cant be both param and global
         logger = baselogger.getChild(f"{__name__}cog")
-        self.users: Dict[int, self.Player] = {}
-        self.lobbies: Dict[int, self.Lobby] = {}
+        self.users: dict[int, self.Player] = {}
+        self.lobbies: dict[int, self.Lobby] = {}
         os.makedirs(r"./data", exist_ok=True)
         try:
             with open(root + r"/data/touilUsers.txt","r") as f:
@@ -37,7 +33,7 @@ class LobbyCog(commands.Cog):
         except OSError as e:
             logger.warning(e)
             with open(root + r"/data/touilUsers.txt", "w") as f:
-                json.dump([],f)
+                json.dump([], f)
                 logger.info(f"{f} created")
         except json.decoder.JSONDecodeError as e:
             logger.error(f"Error reading users: {e}")
@@ -47,12 +43,12 @@ class LobbyCog(commands.Cog):
     async def wikigame(self, interaction):
         pass
 
-    @wikigame.subcommand(name="stats",description="Shows your stats across all the games you´ve played.")
-    async def showstats(self,ctx,user:discord.User=discord.SlashOption(name="user",description="See someone else´s profile.",required=False,default=None)):
+    @wikigame.subcommand(name="stats", description="Shows your stats across all the games you´ve played.")
+    async def showstats(self, ctx, user: discord.User=discord.SlashOption(name="user", description="See someone else´s profile.", required=False, default=None)):
         if user is None:
             user = ctx.user
         player = self.getUserFromDC(user)
-        embedVar = discord.Embed(title=f"__{user.display_name}'s stats__",color=user.color)
+        embedVar = discord.Embed(title=f"__{user.display_name}'s stats__", color=user.color)
         if len(player.stats.keys()) == 0:
             embedVar.add_field(name="Empty", value="Looks like this user has not played Wikigame before. Encourage them by inviting them to a game!")
         for k,v in player.stats.items():
@@ -93,7 +89,7 @@ class LobbyCog(commands.Cog):
                 self.add_item(self.input)
 
             async def callback(self, interaction: discord.Interaction):
-                if antimakkcen(self.input.value) not in map(antimakkcen,self.pagi.lobby.allwords):
+                if antimakkcen(self.input.value) not in map(antimakkcen, self.pagi.lobby.allwords):
                     self.pagi.inv.append(self.input.value)
                     await self.pagi.render(interaction)
                     await self.pagi.lobby.messageid.edit(embed=self.pagi.lobby.show())
@@ -102,7 +98,10 @@ class LobbyCog(commands.Cog):
 
     class RemoveWordSelect(discord.ui.Select):
         def __init__(self, pagi: Paginator):
-            super().__init__(min_values=1,max_values=max(1,len(pagi.slice_inventory())),placeholder="Select words to remove", options=([discord.SelectOption(label=word, emoji=emoji.emojize(":cross_mark:")) for word in pagi.slice_inventory()] or [discord.SelectOption(label="None")]),disabled=not pagi.inv)
+            super().__init__(min_values=1, max_values=max(1, len(pagi.slice_inventory())),
+                             placeholder="Select words to remove",
+                             options=([discord.SelectOption(label=word, emoji=emoji.emojize(":cross_mark:")) for word in pagi.slice_inventory()] or [discord.SelectOption(label="None")]),
+                             disabled=not pagi.inv)
                 # discord.SelectOption(label="Close", value="touil.removeword.exit", emoji=emoji.emojize(":cross_mark:"))
             # ])
             self.pagi: Paginator = pagi
@@ -215,17 +214,17 @@ class LobbyCog(commands.Cog):
                 await ctx.send(embed=discord.Embed(title="You are not in this lobby.",color=discord.Color.red()),ephemeral=True,delete_after=5.0)
                 logger.debug(f"{ctx.user.name} clicked ready on not joined lobby")
 
-        @discord.ui.button(style=discord.ButtonStyle.blurple,emoji=emoji.emojize(":right_arrow:"),disabled=True)
-        async def startbutton(self,button,ctx):
+        @discord.ui.button(style=discord.ButtonStyle.blurple,emoji=emoji.emojize(":right_arrow:"), disabled=True)
+        async def startbutton(self, button, ctx):
             await ctx.response.defer()
             if self.lobby.lobbyleader == ctx.user:
                 try:
-                    await self.lobby.managemsg.edit(embed=None,view=None,content="Game started.",delete_after=5.0)
+                    await self.lobby.managemsg.edit(embed=None,view=None,content="Game started.", delete_after=5.0)
                 except nextcord.errors.NotFound:
                     pass
                 await self.lobby.start(ctx)
             else:
-                await ctx.send(embed=discord.Embed(title="You are not the leader of this lobby.",color=discord.Color.red()),ephemeral=True)
+                await ctx.send(embed=discord.Embed(title="You are not the leader of this lobby.", color=discord.Color.red()), ephemeral=True)
                 logger.info(f"{ctx.user.name} wanted to start game when not lobbyleader")
 
         async def on_timeout(self) -> None:
@@ -234,8 +233,8 @@ class LobbyCog(commands.Cog):
 
     class KickPlayerDropdown(discord.ui.Select):
         def __init__(self, lobby, cog):
-            self.lobby: LobbyCog.Lobby = lobby
-            self.cog: LobbyCog = cog
+            self.lobby: WikiGameCog.Lobby = lobby
+            self.cog: WikiGameCog = cog
             # self.players = self.lobby.players[1:]
             self.players = [player for player in self.lobby.players if player.userid != self.lobby.lobbyleader.id] #first player later doesnt have to be the lobbyleader
             optionslist=list([discord.SelectOption(label=i.name, value=i.userid) for i in self.players])
@@ -278,7 +277,7 @@ class LobbyCog(commands.Cog):
             return
         else:
             lobbymessage = await ctx.channel.send(embed=discord.Embed(title="Generating lobby..."))
-            newLobby: LobbyCog.Lobby = self.Lobby(ctx, lobbymessage, self, private=(private == "Private"))
+            newLobby: WikiGameCog.Lobby = self.Lobby(ctx, lobbymessage, self, private=(private == "Private"))
             # newLobby.players.append(user)
 
             self.lobbies.update({newLobby.code:newLobby})
@@ -299,7 +298,7 @@ class LobbyCog(commands.Cog):
             self.cog = cog
             self.maxplayers: int = 25
             self.minplayers: int = 3
-            self.players: list[LobbyCog.Player] = []
+            self.players: list[WikiGameCog.Player] = []
             self.private: bool = private
             while (code := "".join([chr(randint(65, 90)) for _ in range(4)])) in [lobby.code for lobby in self.cog.lobbies.values()]:
                 logger.info(f"generating lobbycode {code}")
@@ -366,7 +365,7 @@ class LobbyCog(commands.Cog):
                     await ctx.send(embed=discord.Embed(title="A game is already running.", color=discord.Color.red()), ephemeral=True)
                     logger.warning("ongoing game")
 
-        async def addPlayer(self, ctx: discord.Interaction, player: LobbyCog.Player) -> None:
+        async def addPlayer(self, ctx: discord.Interaction, player: WikiGameCog.Player) -> None:
             if not self.maxplayers or len(self.players) < self.maxplayers:
                 if not self.ongoing:
                     if not player.inLobby:
@@ -374,7 +373,7 @@ class LobbyCog(commands.Cog):
                         # player.words = deepcopy(list(string.ascii_lowercase))
                         await embedutil.success(ctx, "Joined")
                     else:
-                        await embedutil.error(interaction, f"You are already in a lobby. Try {mentionCommand(client,'wikigame leave')}", delete=10)
+                        await embedutil.error(ctx, f"You are already in a lobby. Try {mentionCommand(client,'wikigame leave')}", delete=10)
                         logger.debug("already in lobby")
                         return
                     #await self.messageid.edit(embed=self.show()) #redundant: gets updated in readyCheck again too so
@@ -383,9 +382,9 @@ class LobbyCog(commands.Cog):
                 else:
                     logger.error("ongoing game") #shouldnt be a possibility, remove buttons from lobbymsg after start
             else:
-                await embedutil.error(interaction, "Lobby is already full!")
+                await embedutil.error(ctx, "Lobby is already full!")
 
-        async def removePlayer(self, ctx: discord.Interaction, player: LobbyCog.Player) -> None:
+        async def removePlayer(self, ctx: discord.Interaction, player: WikiGameCog.Player) -> None:
             if not self.ongoing:
                 if player in self.players:
                     self.players.remove(player)
@@ -453,19 +452,20 @@ class LobbyCog(commands.Cog):
         else:
             await embedutil.error(ctx,"You are not currently in a lobby.")
 
-    def getUserFromDC(self, dcUser: int|discord.Member| "LobbyCog.Player"):
+    def getUserFromDC(self, dcUser: int|discord.Member| "WikiGameCog.Player"):
         if isinstance(dcUser, int):
             lookingfor = dcUser
         elif isinstance(dcUser, discord.Member):
             lookingfor = dcUser.id
-        elif isinstance(dcUser, LobbyCog.Player): #just keep it
+        elif isinstance(dcUser, WikiGameCog.Player): #just keep it
             lookingfor = dcUser.userid
         else:
             raise NotImplementedError(type(dcUser))
         if lookingfor in self.users: #idk how to do this with defaultdict
             return self.users.get(lookingfor)
         else:
-            user = self.Player(dcUser)
+            lookingfor = client.get_user(lookingfor)
+            user = self.Player(lookingfor)
             self.users.update({user.userid: user})
             self.savePlayers()
             return user
@@ -518,14 +518,14 @@ class LobbyCog(commands.Cog):
             return {k:v for k,v in self.__dict__.items() if k not in ("words","inLobby","ready")}
 
 class WikiGame():
-    def __init__(self, lobby: LobbyCog.Lobby):
+    def __init__(self, lobby: WikiGameCog.Lobby):
         self.lobby = lobby
         for player in self.lobby.players:
             player.stats["Games played"] += 1
-        self.players: list[LobbyCog.Player] = None
+        self.players: list[WikiGameCog.Player] = None
         self.initplayers()
         # self.allwords = sum([p.words for p in self.players],[])
-        self.guesser: LobbyCog.Player = None
+        self.guesser: WikiGameCog.Player = None
         self.points = {p.userid:0 for p in self.players}
 
 
@@ -540,13 +540,13 @@ class WikiGame():
         # return set(allwords).difference(set(self.guesser.words)) //set cant be subscripted
         return [word for word in self.allwords if word not in self.guesser.words]
     @property
-    def explainers(self) -> list[LobbyCog.Player]:
+    def explainers(self) -> list[WikiGameCog.Player]:
         return [player for player in self.players if player != self.guesser]
 
     def initplayers(self):
         if not self.players:
             self.players = self.lobby.players
-            # self.players.insert(0, LobbyCog.Player(client.user))
+            # self.players.insert(0, WikiGameCog.Player(client.user))
             # self.players[0].words = ["dummy"]
 
     async def returnToLobby(self):
@@ -593,7 +593,7 @@ class GuesserDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id == self.game.guesser.userid:
-            chosen: LobbyCog.Player = self.game.lobby.cog.getUserFromDC(int(self.values[0]))
+            chosen: WikiGameCog.Player = self.game.lobby.cog.getUserFromDC(int(self.values[0]))
             if chosen == self.game.truth:
                 embedVar = discord.Embed(title="Correct!", description=f"{self.game.truth.name} was telling the truth",
                                          color=discord.Color.green())
@@ -632,4 +632,4 @@ class GuesserDropdown(discord.ui.Select):
             await interaction.message.delete()
             await self.game.returnToLobby()
 def setup(client, baselogger):
-    client.add_cog(LobbyCog(client, baselogger))
+    client.add_cog(WikiGameCog(client, baselogger))

@@ -9,7 +9,10 @@ import logging
 from dotenv import load_dotenv
 import coloredlogs
 
-#TODO a sounds fishy game https://youtu.be/8FyXkwnnLc8
+#TODO a secret identity game using emojis https://youtu.be/klXNAS4bHvc
+#TODO good face bad face
+#TODO cheese thief https://www.youtube.com/watch?v=50V3M5VCsdI&t=1457s
+
 
 start = time_module.perf_counter() #measuring how long it takes to boot up the bot
 
@@ -33,32 +36,9 @@ parser.add_argument("--logfile", action="store_true", help="Turns on logging to 
 parser.add_argument("--no_linecount", action="store_true", help="Turns off line counting.")
 args = parser.parse_args()
 
-baselogger = logging.getLogger("Base")
-
-#formatting the colorlogger
-fmt = "[ %(asctime)s %(filename)s %(lineno)d %(funcName)s %(levelname)s ] %(message)s"
-coloredlogs.DEFAULT_FIELD_STYLES = {'asctime': {'color': 'green'}, 'lineno': {'color': 'magenta'}, 'levelname': {'bold': True, 'color': 'black'}, 'filename': {'color': 'blue'},'funcname': {'color': 'cyan'}}
-coloredlogs.DEFAULT_LEVEL_STYLES = {'critical': {'bold': True, 'color': 'red'}, 'debug': {'bold': True, 'color': 'black'}, 'error': {'color': 'red'}, 'info': {'color': 'green'}, 'notice': {'color': 'magenta'}, 'spam': {'color': 'green', 'faint': True}, 'success': {'bold': True, 'color': 'green'}, 'verbose': {'color': 'blue'}, 'warning': {'color': 'yellow'}}
-
-
-if args.logfile: #if you need a text file
-    FORMAT = "[{asctime}][{filename}][{lineno:4}][{funcName}][{levelname}] {message}"
-    formatter = logging.Formatter(FORMAT, style="{")  #this is for default logger
-    filename = f"./logs/bot_log_{datetime.now().strftime('%m-%d-%H-%M-%S')}.txt"
-    os.makedirs(r"./logs", exist_ok=True)
-    with open(filename, "w") as f:
-        pass
-    fl = logging.FileHandler(filename)
-    fl.setFormatter(formatter)
-    fl.setLevel(logging.DEBUG)
-    #fl.addFilter(lambda rec: rec.levelno <= 10) #if u only wanna filter debugs
-    baselogger.addHandler(fl)
-
-baselogger.setLevel(logging.DEBUG) #base is debug, so the file handler could catch debug msgs too
-if args.debug:
-    coloredlogs.install(level=logging.DEBUG, logger=baselogger, fmt=fmt)
-else:
-    coloredlogs.install(level=logging.INFO, logger=baselogger, fmt=fmt)
+from utils import mylogger
+mylogger.init(args) #initializing the logger
+from utils.mylogger import baselogger #mylogger.baselogger too long
 
 root = os.getcwd()  #current working directory
 
