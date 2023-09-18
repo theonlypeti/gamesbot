@@ -26,11 +26,11 @@ root = os.getcwd()
 
 
 class FishyCog(commands.Cog):
-    def __init__(self, client1: discord.Client, baselogger):
+    def __init__(self, client1: discord.Client):
         global logger
         global client
         client = client1 #cant be both param and global
-        logger = baselogger.getChild(f"{__name__}cog")
+        logger = client.logger.getChild(f"{__name__}cog")
         self.users: dict[int, self.Player] = {}
         self.lobbies: dict[int, self.Lobby] = {}
         os.makedirs(r"./data", exist_ok=True)
@@ -68,66 +68,6 @@ class FishyCog(commands.Cog):
             embedVar.add_field(name=k, value=v)
         await ctx.send(embed=embedVar)
 
-    async def manage_words(self, ctx: discord.Interaction, player, lobby):
-        player: Player = player
-        pagi = Paginator(
-            func=lambda pagi:
-            discord.Embed(
-                title=f"{player.name}'s words (Page {max(1,pagi.page)}/{max(1,pagi.maxpages)})",
-                description=("\n".join(pagi.slice_inventory()) or "Looks like you don't have any words yet! Add some with the button below!"),
-            ),
-            select=self.RemoveWordSelect,
-            inv=player.words,
-            itemsOnPage=25)
-
-        pagi.mergeview(self.AddWordView(pagi))
-        pagi.lobby = lobby
-        await pagi.render(ctx, ephemeral=True, edit=False)
-
-    class AddWordView(discord.ui.View):
-        def __init__(self, pagi):
-            super().__init__(timeout=pagi.timeout)
-            self.pagi: Paginator = pagi
-
-        @discord.ui.button(label="Add word", style=discord.ButtonStyle.primary, emoji=emoji.emojize(":plus:"))
-        async def add_word(self, button: discord.ui.Button, interaction: discord.Interaction):
-            # await interaction.response.defer()
-            await interaction.response.send_modal(self.AddWordModal(self.pagi))
-
-        class AddWordModal(discord.ui.Modal):
-            def __init__(self, pagi):
-                super().__init__(title="Add a word")
-                self.pagi: Paginator = pagi
-                self.input = discord.ui.TextInput(label="Enter a word", min_length=1, max_length=50)
-                self.add_item(self.input)
-
-            async def callback(self, interaction: discord.Interaction):
-                if antimakkcen(self.input.value) not in map(antimakkcen, self.pagi.lobby.allwords):
-                    self.pagi.inv.append(self.input.value)
-                    await self.pagi.render(interaction)
-                    await self.pagi.lobby.messageid.edit(embed=self.pagi.lobby.show())
-                else:
-                    await embedutil.error(interaction, "Word already submitted by someone")
-
-    class RemoveWordSelect(discord.ui.Select):
-        def __init__(self, pagi: Paginator):
-            super().__init__(min_values=1, max_values=max(1, len(pagi.slice_inventory())),
-                             placeholder="Select words to remove",
-                             options=([discord.SelectOption(label=word, emoji=emoji.emojize(":cross_mark:")) for word in pagi.slice_inventory()] or [discord.SelectOption(label="None")]),
-                             disabled=not pagi.inv)
-                # discord.SelectOption(label="Close", value="touil.removeword.exit", emoji=emoji.emojize(":cross_mark:"))
-            # ])
-            self.pagi: Paginator = pagi
-
-        async def callback(self, interaction: discord.Interaction):
-            # if self.values[0] != "touil.removeword.exit":
-            for word in self.values:
-                self.pagi.inv.remove(word)
-            await self.pagi.render(interaction)
-            await self.pagi.lobby.messageid.edit(embed=self.pagi.lobby.show())
-            # else:
-                # msg = await self.pagi.msg.delete()
-
     @fishy.subcommand(name="help", description="Shows the help manual to this game and the bot.")
     async def showhelp(self, ctx: discord.Interaction):
         helptext = {
@@ -149,8 +89,9 @@ class FishyCog(commands.Cog):
             The blue kipper may twist and turn the truth, but they must not lie.
             
             After everyone has answered, the guesser will __one by one__ try to reveal the red herrings.
-            The guesser may __stop anytime__ and take the points, however __incorrectly guessing__ and revealing the blue kipper
-            will result in the guesser __getting 0 points__.
+            The guesser may __stop anytime__ and take the points, however __incorrectly guessing__ 
+            and revealing the blue kipper will result in the guesser __getting 0 points__.
+            Other players are getting points based on how many fish are revealed before them.
             """,
 
             "credits": """The game is based on the tabletop board game *Sounds fishy* by Big Potato Games
@@ -199,15 +140,7 @@ class FishyCog(commands.Cog):
 
         @discord.ui.button(style=discord.ButtonStyle.grey, emoji=emoji.emojize(":memo:"), disabled=True)
         async def wordsbutton(self, button, ctx):
-            player = self.cog.getUserFromDC(ctx.user)
-            if player.ready:
-                await embedutil.error(ctx, "You may not change your words while marked ready")
-                return
-            if not player.inLobby:
-                await embedutil.error(ctx, "You are not in a lobby!")
-                return
-            await self.cog.manage_words(ctx, player, self.lobby)
-            logger.debug(f"{ctx.user.name} clicked addwords")
+            ...
 
         @discord.ui.button(style=discord.ButtonStyle.green, emoji=emoji.emojize(":check_mark_button:"))
         async def readybutton(self, button, ctx: discord.Interaction):
@@ -218,8 +151,8 @@ class FishyCog(commands.Cog):
                 if True:
                     player.ready = not player.ready
                     await self.lobby.readyCheck()
-                else:
-                    await ctx.send(embed=discord.Embed(title="You do not have any words", color=discord.Color.red()), ephemeral=True, delete_after=5.0)
+                # else:
+                #     await ctx.send(embed=discord.Embed(title="You do not have any words", color=discord.Color.red()), ephemeral=True, delete_after=5.0)
             else:
                 await ctx.send(embed=discord.Embed(title="You are not in this lobby.", color=discord.Color.red()), ephemeral=True, delete_after=5.0)
                 logger.debug(f"{ctx.user.name} clicked ready on not joined lobby")
@@ -266,7 +199,7 @@ class FishyCog(commands.Cog):
             self.cog = cog
             super().__init__(timeout=None)
 
-        @discord.ui.button(label="Kick Player",style=discord.ButtonStyle.red, emoji=emoji.emojize(":boot:", language="alias"))
+        @discord.ui.button(label="Kick Player", style=discord.ButtonStyle.red, emoji=emoji.emojize(":boot:", language="alias"))
         async def kickbutton(self, button, inter):
             viewObj = discord.ui.View()
             viewObj.add_item(self.cog.KickPlayerDropdown(self.lobby, self.cog))
@@ -279,11 +212,11 @@ class FishyCog(commands.Cog):
             self.lobby.messageid = lobbymessage
             await self.lobby.messageid.edit(embed=self.lobby.show(), view=self.cog.LobbyView(self.cog, self.lobby))
 
-    @fishy.subcommand(name="start", description="Makes a lobby for a Two of us is lying game.")
-    async def makeLobby(self, ctx:discord.Interaction, private=discord.SlashOption(name="private", description="Do you wish to create a public lobby or a private one",required=False,default="Public",choices=("Public","Private"))):
+    @fishy.subcommand(name="start", description="Makes a lobby for a Sounds Fishy game.")
+    async def makeLobby(self, ctx:discord.Interaction, private=discord.SlashOption(name="private", description="Do you wish to create a public lobby or a private one",required=False, default="Public", choices=("Public","Private"))):
         user = self.getUserFromDC(ctx.user)
         if user.inLobby:
-            await ctx.send(embed=discord.Embed(title=f"You are already in a lobby. Try {mentionCommand(client,'fishy leave')}", color=discord.Color.red()),ephemeral=True)
+            await ctx.send(embed=discord.Embed(title=f"You are already in a lobby. Try {mentionCommand(client,'fishy leave')}", color=discord.Color.red()), ephemeral=True)
             return
         else:
             lobbymessage = await ctx.channel.send(embed=discord.Embed(title="Generating lobby..."))
@@ -333,7 +266,7 @@ class FishyCog(commands.Cog):
             EmbedVar = discord.Embed(
                 title=f"{name}'s {('Public' if not self.private else 'Private')} **Sound fishy** Lobby" + (f" ({len(self.players)}/{self.maxplayers})" if self.maxplayers else ""),
                 description=("Game already running." if self.ongoing else f"use **{mentionCommand(client,'fishy join')} {self.code}** or click the join icon") if not self.private else f"ask the lobby leader for the code, \nthen use {mentionCommand(client,'fishy join')} *CODE*, don't worry noone will see that.") #extra space deliberate, otherwise looks stupid
-            EmbedVar.set_footer(text="{} join, {} leave, {} ---, {} ready".format(emoji.emojize(":inbox_tray:"), emoji.emojize(":outbox_tray:"), emoji.emojize(":memo:"),emoji.emojize(":check_mark_button:")))
+            EmbedVar.set_footer(text="{} join, {} leave, {} ---, {} ready".format(emoji.emojize(":inbox_tray:"), emoji.emojize(":outbox_tray:"), emoji.emojize(":memo:"), emoji.emojize(":check_mark_button:")))
             i = 1
             for i, player in enumerate(self.players, start=1):
                 EmbedVar.add_field(name=f"{i}. {player}", value="Ready?"+(emoji.emojize(":cross_mark:"), emoji.emojize(":check_mark_button:"))[bool(player.ready)],inline=False)
@@ -370,8 +303,9 @@ class FishyCog(commands.Cog):
                     self.ongoing = True
                     await self.readyCheck() #this is needed to update the view
                     # self.players = [FishyCog.Player(i) for i in ctx.guild.members if i.id != self.lobbyleader.id and i not in ctx.guild.bots] + self.players
-                    self.players = [FishyCog.Player(client.get_user(936709668317823078))] + self.players
+                    # self.players = [FishyCog.Player(client.get_user(936709668317823078))] + self.players
                     game = FishyGame(self) #create game
+
                     await game.start(ctx.channel) #start game #if i do ctx.send it breaks after 15mins cuz interactions.
                     self.cog.savePlayers()
                 else:  #should not be achievable as the start button should be disabled when game is ongoing, maybe delete
@@ -483,6 +417,7 @@ class FishyCog(commands.Cog):
             return self.users.get(lookingfor)
         else:
             lookingfor = client.get_user(lookingfor)
+            print(lookingfor)
             user = self.Player(lookingfor)
             self.users.update({user.userid: user})
             self.savePlayers()
@@ -506,8 +441,9 @@ class FishyCog(commands.Cog):
                 self.stats: dict[str, int] = defaultdict(int)
                 self.userid = discorduser.id
             self.ready = False
-            self.words: list[str] = []
+            # self.words: list[str] = []
             self.inLobby = False
+            self.points = 0
 
         @property
         def name(self):
@@ -529,7 +465,7 @@ class FishyCog(commands.Cog):
                 raise NotImplemented(f"Comparison between {type(self)} and {type(other)}")
 
         def __str__(self):
-            return f"{self.name}"
+            return f"{self.name} ({self.points} points)"
 
         def toDict(self):
             return {k: v for k, v in self.__dict__.items() if k not in ("words", "inLobby", "ready")}
@@ -543,20 +479,20 @@ class FishyGame():
         self.initplayers()
         # self.allwords = sum([p.words for p in self.players],[])
         self.guesser: FishyCog.Player = None
-        self.points = {p.userid: 0 for p in self.players}
+        # self.points = {p.userid: 0 for p in self.players}
         self.questions = self.lobby.questions
 
 
-    @property
-    def allwords(self):
-        return sum([p.words for p in self.players], [])
-
-    @property
-    def words(self):
-        # return self.allwords - self.guesser.words //no operand - for list
-        # return filter(lambda word: word not in self.guesser.words, self.allwords) //filter has no len
-        # return set(allwords).difference(set(self.guesser.words)) //set cant be subscripted
-        return [word for word in self.allwords if word not in self.guesser.words]
+    # @property
+    # def allwords(self):
+    #     return sum([p.words for p in self.players], [])
+    #
+    # @property
+    # def words(self):
+    #     # return self.allwords - self.guesser.words //no operand - for list
+    #     # return filter(lambda word: word not in self.guesser.words, self.allwords) //filter has no len
+    #     # return set(allwords).difference(set(self.guesser.words)) //set cant be subscripted
+    #     return [word for word in self.allwords if word not in self.guesser.words]
     @property
     def explainers(self) -> list[FishyCog.Player]:
         return [player for player in self.players if player != self.guesser]
@@ -626,6 +562,14 @@ class GuesserDropdown(discord.ui.Select):
                 embedVar.add_field(name="Blue kip points", value=f"{0}")
                 embedVar.add_field(name="Not revealed Red herring points", value=f"{len(self.game.explainers) - len(self.options) + 1}")
                 await interaction.edit(embed=embedVar, view=self.NextButton(self.game))
+
+                self.game.guesser.points += len(self.game.explainers) - len(self.options) + 1
+                self.game.lobby.cog.getUserFromDC(self.game.guesser).stats["Times banked points"] += 1
+                for player in self.options:
+                    if player.value != "0":
+                        [p for p in self.game.players if str(p.userid) == player.value][0].points += (len(self.game.explainers) - len(self.options) + 1)
+                        self.game.lobby.cog.getUserFromDC(player.value).stats["Guessers fooled"] += 1
+
                 self.game.lobby.cog.savePlayers()
             else:
                 chosen: FishyCog.Player = self.game.lobby.cog.getUserFromDC(int(self.values[0]))
@@ -635,8 +579,13 @@ class GuesserDropdown(discord.ui.Select):
                     embedVar.add_field(name="Blue kip points", value=f"{len(self.options) - 1}")
                     embedVar.add_field(name="Not revealed Red herring points", value=f"{len(self.game.explainers) - len(self.options) + 1}")
 
-                    # self.game.points[self.game.guesser.userid] += 1
-                    self.game.lobby.cog.getUserFromDC(self.game.guesser).stats["Correct guesses"] += 1
+                    for player in self.options:
+                        if player.value != "0":
+                            self.game.lobby.cog.getUserFromDC(player.value).stats["Guessers fooled"] += 1
+                            [p for p in self.game.players if str(p.userid) == player.value][0].points += (len(self.game.explainers) - len(self.options) + 1)
+                    self.game.lobby.cog.getUserFromDC(self.game.truth).stats["Guessers fooled"] += 1
+                    self.game.truth.points += (len(self.options) - 1)
+                    self.game.lobby.cog.getUserFromDC(self.game.guesser).stats["Times got fooled"] += 1
 
                     #TODO add herring images to embeds
 
@@ -648,6 +597,8 @@ class GuesserDropdown(discord.ui.Select):
                         embedVar = discord.Embed(title=f"Every red herring revealed!",
                                                  color=discord.Color.green())
                         embedVar.add_field(name="Guesser points", value=f"{len(self.game.explainers) - 1}")
+                        self.game.guesser.points += len(self.game.explainers) - 1
+                        self.game.lobby.cog.getUserFromDC(self.game.guesser).stats["Cleared all herrings"] += 1
                         self.game.lobby.cog.savePlayers()
                         await interaction.edit(embed=embedVar, view=self.NextButton(self.game))
                     else:
@@ -655,6 +606,7 @@ class GuesserDropdown(discord.ui.Select):
                                                  description=f"Do you wish to continue?",
                                                  color=discord.Color.red())
                         await interaction.edit(embed=embedVar, view=self.view)
+                        self.game.lobby.cog.getUserFromDC(self.game.guesser).stats["Red herrings revealed"] += 1
 
                 # for k, v in self.game.points.items():
                 #     embedVar.add_field(name=self.game.lobby.cog.getUserFromDC(k).name, value=v)
@@ -662,7 +614,6 @@ class GuesserDropdown(discord.ui.Select):
 
         else:
             await embedutil.error(interaction, "It is not your turn to guess!")
-
 
     class NextButton(discord.ui.View):
         def __init__(self, game: FishyGame):
@@ -677,11 +628,11 @@ class GuesserDropdown(discord.ui.Select):
             await interaction.message.delete()
             await self.game.round(interaction.channel)
 
-        @discord.ui.button(label="Back to Lobby")
+        @discord.ui.button(label="Back to Lobby (see points)")
         async def lobby(self, button, interaction: discord.Interaction):
             await interaction.message.delete()
             await self.game.returnToLobby()
 
 
-def setup(client, baselogger):
-    client.add_cog(FishyCog(client, baselogger))
+def setup(client):
+    client.add_cog(FishyCog(client))

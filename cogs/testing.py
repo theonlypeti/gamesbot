@@ -9,12 +9,12 @@ TESTSERVER = (860527626100015154,)
 
 
 class Testing(commands.Cog):
-    def __init__(self, client, baselogger):
+    def __init__(self, client):
         global logger
-        logger = baselogger.getChild(f"{__name__}Logger")
+        logger = client.logger.getChild(f"{__name__}Logger")
         self.client: discord.Client = client
 
-    @discord.slash_command(name="testing",guild_ids=TESTSERVER)
+    @discord.slash_command(name="testing", guild_ids=TESTSERVER)
     async def testinggrp(self, interaction: discord.Interaction):
         pass
 
@@ -31,7 +31,7 @@ class Testing(commands.Cog):
     async def threetest(self, interaction: discord.Interaction):
         await interaction.send("hi")
 
-    @discord.slash_command(name="run", description="For running python code",guild_ids=TESTSERVER)
+    @discord.slash_command(name="run", description="For running python code", guild_ids=TESTSERVER)
     async def run(self, ctx: discord.Interaction, command):
         if "@" in command and ctx.user.id != 617840759466360842:
             await ctx.send("oi oi oi we pinging or what?")
@@ -86,6 +86,6 @@ class Testing(commands.Cog):
 #     await interaction.send("hi")
 
 
-def setup(client, baselogger):
-    client.add_cog(Testing(client, baselogger))
+def setup(client):
+    client.add_cog(Testing(client))
 

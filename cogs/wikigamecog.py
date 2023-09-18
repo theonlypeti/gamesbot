@@ -15,17 +15,18 @@ from utils import embedutil
 
 root = os.getcwd()
 
+
 class WikiGameCog(commands.Cog):
-    def __init__(self, client1: discord.Client, baselogger):
+    def __init__(self, client1: discord.Client):
         global logger
         global client
         client = client1 #cant be both param and global
-        logger = baselogger.getChild(f"{__name__}cog")
+        logger = client1.logger.getChild(f"{__name__}cog")
         self.users: dict[int, self.Player] = {}
-        self.lobbies: dict[int, self.Lobby] = {}
+        self.lobbies: dict[str, self.Lobby] = {}
         os.makedirs(r"./data", exist_ok=True)
         try:
-            with open(root + r"/data/touilUsers.txt","r") as f:
+            with open(root + r"/data/touilUsers.txt", "r") as f:
                 tempusers = json.load(f)
                 logger.debug(f"{len(tempusers)} player profiles loaded")
                 for k in tempusers:
@@ -115,7 +116,7 @@ class WikiGameCog(commands.Cog):
             # else:
                 # msg = await self.pagi.msg.delete()
 
-    @wikigame.subcommand(name="help",description="Shows the help manual to this game and the bot.")
+    @wikigame.subcommand(name="help", description="Shows the help manual to this game and the bot.")
     async def showhelp(self, ctx: discord.Interaction):
         helptext = {
             "commands": f"""{mentionCommand(client,'wikigame start')} makes a lobby for a game. You can set the lobby
@@ -153,10 +154,10 @@ class WikiGameCog(commands.Cog):
 
         class HelpTopicSelector(discord.ui.Select):
             def __init__(self):
-                opts = [discord.SelectOption(label="Commands",description="Gives help about the game commands.",value="commands",emoji=emoji.emojize(":paperclip:")),
-                        discord.SelectOption(label="Rules",description="Explains the rules of this game.",value="rules",emoji=emoji.emojize(":ledger:")),
-                        discord.SelectOption(label="Credits",description="Links and about.",value="credits",emoji=emoji.emojize(":globe_with_meridians:")),
-                        discord.SelectOption(label="Close",value="0",emoji=emoji.emojize(":cross_mark:"))]
+                opts = [discord.SelectOption(label="Commands", description="Gives help about the game commands.", value="commands",emoji=emoji.emojize(":paperclip:")),
+                        discord.SelectOption(label="Rules", description="Explains the rules of this game.", value="rules", emoji=emoji.emojize(":ledger:")),
+                        discord.SelectOption(label="Credits", description="Links and about.", value="credits", emoji=emoji.emojize(":globe_with_meridians:")),
+                        discord.SelectOption(label="Close", value="0", emoji=emoji.emojize(":cross_mark:"))]
                 super().__init__(options=opts)
 
             async def callback(self, interaction: discord.Interaction):
@@ -450,7 +451,7 @@ class WikiGameCog(commands.Cog):
             await lobby.removePlayer(ctx.channel, user)
             await lobby.managemsg.edit(view=self.MngmntView(lobby, self)) #removing the player from the kick dropdown
         else:
-            await embedutil.error(ctx,"You are not currently in a lobby.")
+            await embedutil.error(ctx, "You are not currently in a lobby.")
 
     def getUserFromDC(self, dcUser: int|discord.Member| "WikiGameCog.Player"):
         if isinstance(dcUser, int):
@@ -471,8 +472,8 @@ class WikiGameCog(commands.Cog):
             return user
 
     def savePlayers(self):
-        with open(root + r"/data/touilUsers.txt","w") as file:
-            json.dump([v.toDict() for k,v in self.users.items()],file,indent=4)
+        with open(root + r"/data/touilUsers.txt", "w") as file:
+            json.dump([v.toDict() for k, v in self.users.items()], file, indent=4)
         logger.info("saved")
 
     class Player(object):
@@ -515,7 +516,7 @@ class WikiGameCog(commands.Cog):
             return f"{self.name} ({len(self.words)} words)"
 
         def toDict(self):
-            return {k:v for k,v in self.__dict__.items() if k not in ("words","inLobby","ready")}
+            return {k: v for k, v in self.__dict__.items() if k not in ("words", "inLobby", "ready")}
 
 class WikiGame():
     def __init__(self, lobby: WikiGameCog.Lobby):
@@ -531,7 +532,7 @@ class WikiGame():
 
     @property
     def allwords(self):
-        return sum([p.words for p in self.players],[])
+        return sum([p.words for p in self.players], [])
 
     @property
     def words(self):
@@ -584,6 +585,7 @@ class WikiGame():
         viewObj.add_item(GuesserDropdown(self))
         await self.channel.send(embed=discord.Embed(title=f"{self.guesser.name} is guessing", description=f"The word is ||{self.word}||"),view=viewObj)
 
+
 class GuesserDropdown(discord.ui.Select):
     def __init__(self, game):
         super().__init__()
@@ -631,5 +633,7 @@ class GuesserDropdown(discord.ui.Select):
         async def lobby(self, button, interaction: discord.Interaction):
             await interaction.message.delete()
             await self.game.returnToLobby()
-def setup(client, baselogger):
-    client.add_cog(WikiGameCog(client, baselogger))
+
+
+def setup(client):
+    client.add_cog(WikiGameCog(client))

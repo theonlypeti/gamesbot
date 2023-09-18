@@ -45,6 +45,7 @@ root = os.getcwd()  #current working directory
 intents = discord.Intents.default()
 intents.members = True #needed so the bot can see server members
 client = commands.Bot(intents=intents, chunk_guilds_at_startup=True,activity=discord.Game(name="Booting up..."))
+client.logger = baselogger
 
 @client.event
 async def on_ready():
@@ -91,7 +92,7 @@ for n, file in enumerate(cogs, start=1): #its in two only because i wouldnt know
     if not args.no_linecount:
         with open("./cogs/"+file, "r", encoding="UTF-8") as f:
             linecount += len(f.readlines())
-    client.load_extension("cogs." + file[:-3], extras={"baselogger": baselogger})
+    client.load_extension("cogs." + file[:-3])
     if not args.debug:
         sys.stdout.write(f"\rLoading... {(n / len(cogs)) * 100:.02f}% [{(int((n/len(cogs))*10)*'=')+'>':<10}]")
         sys.stdout.flush()
