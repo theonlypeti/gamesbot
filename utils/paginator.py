@@ -2,6 +2,7 @@ from math import ceil
 from typing import Callable, Sequence
 import emoji
 import nextcord as discord
+import nextcord.errors
 
 
 class Paginator(discord.ui.View):
@@ -69,6 +70,7 @@ class Paginator(discord.ui.View):
         """Updates the paginator.
         This is called automatically when the buttons are pressed and the paginator is rendered.
         Disables the paginator buttons if there is only one page."""
+        print(len(self.inv)/self.itemsOnPage)
         self.maxpages = ceil(len(self.inv) / self.itemsOnPage)  # in case the inventory changes
         self.page = max(min(self.page, self.maxpages-1), 0)
 
@@ -76,6 +78,10 @@ class Paginator(discord.ui.View):
             for ch in self.children:
                 if ch.custom_id in ("leftbutton", "rightbutton"):
                     ch.disabled = True
+        else:
+            for ch in self.children:
+                if ch.custom_id in ("leftbutton", "rightbutton"):
+                    ch.disabled = False
         if self.select:
             select = list(filter(lambda i: i.custom_id == "pagiselect", self.children))
             if select:
@@ -106,7 +112,7 @@ class Paginator(discord.ui.View):
                     self.msg = await msg.edit(embed=self.func(self), view=self, **kwargs)
                 else:
                     self.msg = await msg.edit(view=self, **kwargs)
-            except (discord.errors.InvalidArgument, TypeError): pass
+            except (discord.errors.InvalidArgument, TypeError, nextcord.errors.NotFound): pass
             else: return
 
         # else:  # if it's an interaction or a text channel, ergo it is sent for the first time

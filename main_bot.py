@@ -5,9 +5,7 @@ from datetime import datetime
 import os
 import argparse
 import time as time_module
-import logging
 from dotenv import load_dotenv
-import coloredlogs
 
 #TODO a secret identity game using emojis https://youtu.be/klXNAS4bHvc
 #TODO good face bad face
@@ -43,14 +41,18 @@ from utils.mylogger import baselogger #mylogger.baselogger too long
 root = os.getcwd()  #current working directory
 
 intents = discord.Intents.default()
+intents.presences = True
 intents.members = True #needed so the bot can see server members
-client = commands.Bot(intents=intents, chunk_guilds_at_startup=True,activity=discord.Game(name="Booting up..."))
+client = commands.Bot(intents=intents, chunk_guilds_at_startup=True, activity=discord.Game(name="Booting up..."))
 client.logger = baselogger
 
 @client.event
 async def on_ready():
-    game = discord.Game(f"{linecount} lines of code; V{VERSION}!")
-    await client.change_presence(status=discord.Status.online, activity=game)
+    game = discord.CustomActivity(
+        name="Custom Status",
+        state=f"{linecount} lines of code; V{VERSION}!"
+    )
+    await client.change_presence(activity=game)
     print(f"Signed in as {client.user.name} at {datetime.now()}")
     baselogger.info(f"{time_module.perf_counter() - start}s Bootup time")
 

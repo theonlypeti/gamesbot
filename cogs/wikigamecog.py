@@ -1,5 +1,7 @@
 from __future__ import annotations
 import os
+import string
+
 from utils.antimakkcen import antimakkcen
 from typing import Optional
 import nextcord as discord
@@ -22,8 +24,8 @@ class WikiGameCog(commands.Cog):
         global client
         client = client1 #cant be both param and global
         logger = client1.logger.getChild(f"{__name__}cog")
-        self.users: dict[int, self.Player] = {}
-        self.lobbies: dict[str, self.Lobby] = {}
+        self.users: dict[int, WikiGameCog.Player] = {}
+        self.lobbies: dict[str, WikiGameCog.Lobby] = {}
         os.makedirs(r"./data", exist_ok=True)
         try:
             with open(root + r"/data/touilUsers.txt", "r") as f:
@@ -57,11 +59,11 @@ class WikiGameCog(commands.Cog):
         await ctx.send(embed=embedVar)
 
     async def manage_words(self, ctx: discord.Interaction, player, lobby):
-        player: Player = player
-        pagi = Paginator(
+        player: WikiGameCog.Player = player
+        pagi = Paginator(  # TODO replace with Inventory
             func=lambda pagi:
             discord.Embed(
-                title=f"{player.name}'s words (Page {max(1,pagi.page)}/{max(1,pagi.maxpages)})",
+                title=f"{player.name}'s words (Page {max(1,pagi.page+1)}/{max(1,pagi.maxpages)})",
                 description=("\n".join(pagi.slice_inventory()) or "Looks like you don't have any words yet! Add some with the button below!"),
             ),
             select=self.RemoveWordSelect,
@@ -230,6 +232,7 @@ class WikiGameCog(commands.Cog):
 
         async def on_timeout(self) -> None:
             await self.lobby.disband()
+            del self.cog.lobbies[self.lobby.code]
             del self
 
     class KickPlayerDropdown(discord.ui.Select):
@@ -301,7 +304,7 @@ class WikiGameCog(commands.Cog):
             self.minplayers: int = 3
             self.players: list[WikiGameCog.Player] = []
             self.private: bool = private
-            while (code := "".join([chr(randint(65, 90)) for _ in range(4)])) in [lobby.code for lobby in self.cog.lobbies.values()]:
+            while (code := "".join([choice(string.ascii_uppercase) for _ in range(4)])) in [lobby.code for lobby in self.cog.lobbies.values()]:
                 logger.info(f"generating lobbycode {code}")
                 continue
             self.code: int = code
@@ -510,7 +513,7 @@ class WikiGameCog(commands.Cog):
             if isinstance(other, self.__class__):
                 return self.userid == other.userid
             else:
-                raise NotImplemented(f"Comparison between {type(self)} and {type(other)}")
+                raise NotImplementedError(f"Comparison between {type(self)} and {type(other)}")
 
         def __str__(self):
             return f"{self.name} ({len(self.words)} words)"

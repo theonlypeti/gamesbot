@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import string
 from copy import deepcopy
 
 from utils.antimakkcen import antimakkcen
@@ -31,8 +32,8 @@ class FishyCog(commands.Cog):
         global client
         client = client1 #cant be both param and global
         logger = client.logger.getChild(f"{__name__}cog")
-        self.users: dict[int, self.Player] = {}
-        self.lobbies: dict[int, self.Lobby] = {}
+        self.users: dict[int, FishyCog.Player] = {}
+        self.lobbies: dict[int, FishyCog.Lobby] = {}
         os.makedirs(r"./data", exist_ok=True)
         try:
             with open(root + r"/data/fishyUsers.txt", "r") as f:
@@ -172,6 +173,7 @@ class FishyCog(commands.Cog):
 
         async def on_timeout(self) -> None:
             await self.lobby.disband()
+            del self.cog.lobbies[self.lobby.code]
             del self
 
     class KickPlayerDropdown(discord.ui.Select):
@@ -180,9 +182,9 @@ class FishyCog(commands.Cog):
             self.cog: FishyCog = cog
             # self.players = self.lobby.players[1:]
             self.players = [player for player in self.lobby.players if player.userid != self.lobby.lobbyleader.id] #first player later doesnt have to be the lobbyleader
-            optionslist=list([discord.SelectOption(label=i.name, value=i.userid) for i in self.players])
+            optionslist = list([discord.SelectOption(label=i.name, value=i.userid) for i in self.players])
             optionslist.append(discord.SelectOption(label="Cancel", value="-1", emoji=emoji.emojize(":cross_mark:")))
-            super().__init__(options=optionslist,placeholder="Pick a player to kick")
+            super().__init__(options=optionslist, placeholder="Pick a player to kick")
 
         async def callback(self, inter):
             result = self.values[0]
@@ -243,7 +245,7 @@ class FishyCog(commands.Cog):
             self.minplayers: int = 3
             self.players: list[FishyCog.Player] = []
             self.private: bool = private
-            while (code := "".join([chr(randint(65, 90)) for _ in range(4)])) in [lobby.code for lobby in self.cog.lobbies.values()]:
+            while (code := "".join([choice(string.ascii_uppercase) for _ in range(4)])) in [lobby.code for lobby in self.cog.lobbies.values()]:
                 logger.info(f"generating lobbycode {code}")
                 continue
             self.code: str = code
@@ -424,7 +426,7 @@ class FishyCog(commands.Cog):
             return user
 
     def savePlayers(self):
-        with open(root + r"/data/fishyplayers.txt", "w") as file:
+        with open(root + r"/data/fishyUsers.txt", "w") as file:
             json.dump([v.toDict() for k, v in self.users.items()], file, indent=4)
         logger.info("saved fishyusers")
 
@@ -462,7 +464,7 @@ class FishyCog(commands.Cog):
             if isinstance(other, self.__class__):
                 return self.userid == other.userid
             else:
-                raise NotImplemented(f"Comparison between {type(self)} and {type(other)}")
+                raise NotImplementedError(f"Comparison between {type(self)} and {type(other)}")
 
         def __str__(self):
             return f"{self.name} ({self.points} points)"
@@ -470,7 +472,8 @@ class FishyCog(commands.Cog):
         def toDict(self):
             return {k: v for k, v in self.__dict__.items() if k not in ("words", "inLobby", "ready")}
 
-class FishyGame():
+
+class FishyGame:
     def __init__(self, lobby: FishyCog.Lobby):
         self.lobby = lobby
         for player in self.lobby.players:
@@ -482,17 +485,6 @@ class FishyGame():
         # self.points = {p.userid: 0 for p in self.players}
         self.questions = self.lobby.questions
 
-
-    # @property
-    # def allwords(self):
-    #     return sum([p.words for p in self.players], [])
-    #
-    # @property
-    # def words(self):
-    #     # return self.allwords - self.guesser.words //no operand - for list
-    #     # return filter(lambda word: word not in self.guesser.words, self.allwords) //filter has no len
-    #     # return set(allwords).difference(set(self.guesser.words)) //set cant be subscripted
-    #     return [word for word in self.allwords if word not in self.guesser.words]
     @property
     def explainers(self) -> list[FishyCog.Player]:
         return [player for player in self.players if player != self.guesser]
@@ -615,7 +607,7 @@ class GuesserDropdown(discord.ui.Select):
         else:
             await embedutil.error(interaction, "It is not your turn to guess!")
 
-    class NextButton(discord.ui.View):
+    class NextButton(discord.ui.View): #TODO if the guesser hasnt made a move in a while this should appear
         def __init__(self, game: FishyGame):
             super().__init__(timeout=None)
             self.game = game
