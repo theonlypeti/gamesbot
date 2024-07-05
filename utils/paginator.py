@@ -1,5 +1,5 @@
 from math import ceil
-from typing import Callable, Sequence
+from typing import Callable, MutableSequence
 import emoji
 import nextcord as discord
 import nextcord.errors
@@ -22,7 +22,7 @@ class Paginator(discord.ui.View):
     :param kwargs: See above.
 
     Add a back button manually with View.add_item, appropriate to the situation you are in."""
-    def __init__(self, func: Callable[..., discord.Embed] | None, select: Callable[..., discord.ui.Select] | None, inv: Sequence, itemsOnPage: int = 25, timeout: int|None = None, kwargs=None):
+    def __init__(self, func: Callable[..., discord.Embed] | None, select: Callable[..., discord.ui.Select] | None, inv: MutableSequence, itemsOnPage: int = 25, timeout: int|None = None, kwargs=None):
         self.mykwargs = kwargs or set()
         self.page: int = 0
         self.maxpages: int = 0  # to be rewritten on update
@@ -32,7 +32,7 @@ class Paginator(discord.ui.View):
             self.select.custom_id = "pagiselect"
         self.itemsOnPage: int = itemsOnPage
         assert self.itemsOnPage
-        self.inv: Sequence = inv
+        self.inv: MutableSequence = inv
         self.msg: discord.Message | None = None
         super().__init__(timeout=timeout)
         self.update()
@@ -55,7 +55,10 @@ class Paginator(discord.ui.View):
         """Called when the paginator times out."""
         for ch in self.children:
             ch.disabled = True
-        await self.msg.edit(view=self)
+        try:
+            await self.msg.edit(view=self)
+        except discord.errors.NotFound:
+            pass
 
     def mergeview(self, view: discord.ui.View, row=2):
         """Merges a discord.ui.View into this one.
@@ -70,7 +73,6 @@ class Paginator(discord.ui.View):
         """Updates the paginator.
         This is called automatically when the buttons are pressed and the paginator is rendered.
         Disables the paginator buttons if there is only one page."""
-        print(len(self.inv)/self.itemsOnPage)
         self.maxpages = ceil(len(self.inv) / self.itemsOnPage)  # in case the inventory changes
         self.page = max(min(self.page, self.maxpages-1), 0)
 
