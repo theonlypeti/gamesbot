@@ -42,7 +42,7 @@ parser.add_argument("--logfile", action="store_true", help="Turns on logging to 
 parser.add_argument("--no_linecount", action="store_true", help="Turns off line counting.")
 args = parser.parse_args()
 
-from utils import mylogger, embedutil
+from utils import mylogger, embedutil, permcheck
 
 baselogger = mylogger.init(args)  # initializing the logger
 
@@ -52,7 +52,7 @@ intents = discord.Intents.default()
 # intents.presences = True
 # intents.members = True  # needed so the bot can see server members
 # intents.message_content = True
-client = commands.Bot(intents=intents, chunk_guilds_at_startup=True, activity=discord.Game(name="Booting up..."), owner_id=ADMIN_ID)
+client = commands.Bot(intents=intents, chunk_guilds_at_startup=False, activity=discord.Game(name="Booting up..."), owner_id=ADMIN_ID)
 client.logger = baselogger
 client.root = root
 
@@ -79,6 +79,16 @@ async def on_application_command_error(inter: discord.Interaction, error: Except
     errmsg = str(error).split(":", maxsplit=1)[1]
     try:
         await embedutil.error(inter, f"{errmsg}", delete=10)
+        if "403" in errmsg and inter.guild is None:
+            await embedutil.error(inter, f"This command will not work if the bot is not invited to the server, or called in a DM.", delete=25)
+        elif "403" in errmsg:
+            perms = permcheck.can_i(inter)
+            if not perms.send_messages:
+                await embedutil.error(inter, f"Missing permission: Send messages", delete=10)
+            if not perms.attach_files:
+                await embedutil.error(inter, f"Missing permission: Attach files", delete=10)
+            if not perms.embed_links:
+                await embedutil.error(inter, f"Missing permission: Embed links", delete=10)
     except discord.HTTPException as e:
         embed = discord.Embed(title="Error", description=f"{errmsg}", color=discord.Color.red())
         if e.status == 401:

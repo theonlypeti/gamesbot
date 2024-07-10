@@ -9,11 +9,11 @@ class ColorGroup:
         self.dccolor = dccolor
         self.hex = str(dccolor)
         self.rgb = dccolor.to_rgb()
-        self.emoji_round = emote_r
-        self.emoji_square = emote_s
-        self.emoji_heart = emote_h
         self.name = name
         self.cmdcolor = cmdcolor
+        self.emoji_square = emote_s
+        self.emoji_round = emote_r
+        self.emoji_heart = emote_h
 
     def string(self, input_string: str) -> str:
         return f"{self.cmdcolor}{input_string}\033[0m"
