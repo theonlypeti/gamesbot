@@ -19,6 +19,7 @@ class TestGameCog(lobby.LobbyCog):
         self.logger.log(25, "hi")
         self.other_commands = {self.testcmd2.name: self.testcmd2}
         self.add_subcommand("ping", self.testtest, "Just testing")
+
     async def testtest(self, interaction: discord.Interaction):  # testing adding subcommand to main game command
         """Pong!"""
         await interaction.send("Pong!")
@@ -68,6 +69,7 @@ class TestGameCog(lobby.LobbyCog):
 
         async def on_disband(self):
             print("aw")
+
 
 class MyAdminView(lobby.AdminView):
     def __init__(self, lobby: TestGameCog.WordsLobby):

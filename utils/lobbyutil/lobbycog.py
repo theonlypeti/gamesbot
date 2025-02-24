@@ -86,13 +86,19 @@ class LobbyCog(commands.Cog):
         ]
         self.help_categories = {c.label: c for c in categories}
 
-    def add_subcommand(self, name: str, callback: Callable[[discord.Interaction], Coroutine[..., ..., None]], description: str = None):
+    @commands.Cog.listener()
+    async def on_interaction(self, inter: discord.Interaction):
+        if not client.intents.members:
+            inter.client._connection._users.update({inter.user.id: inter.user._user})
+
+    def add_subcommand(self, name: str, callback: Callable[[discord.Interaction], Coroutine[..., ..., None]], description: str = None) -> discord.SlashApplicationSubcommand:
         """Adds a subcommand to the base command of the game. The callback function's docstring will appear in the help command's description."""
         cmd = discord.SlashApplicationSubcommand(name=name, description=description,
                                                  parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command,
                                                  callback=callback)
         self.basecmd.children[cmd.name] = cmd
         self.process_app_cmds()
+        return cmd
 
     @property
     def credits(self):
@@ -152,7 +158,10 @@ class LobbyCog(commands.Cog):
         if lookingfor in self.users:  # idk how to do this with defaultdict
             return self.users.get(lookingfor)
         else:
-            lookingfor = client.get_user(lookingfor) or client.fetch_user(lookingfor)
+            if isinstance(dc_user, (discord.Member, discord.User)):
+                lookingfor = dc_user
+            else:
+                lookingfor = client.get_user(int(lookingfor))
             if lookingfor:
                 user = self.playerclass(lookingfor)
                 self.users.update({user.userid: user})
@@ -175,20 +184,22 @@ class LobbyCog(commands.Cog):
 
     # @basegamecmd.subcommand(name="stats", description="Shows your stats across all the games you´ve played.")
     async def showstats(self, interaction: discord.Interaction,
-                        user: discord.User = discord.SlashOption(name="user", description="See someone else´s profile.", required=False, default=None)):
+                        user: discord.Member = discord.SlashOption(name="user", description="See someone else´s profile.", required=False, default=None)):
         """Shows your or someone else's statistics across all games."""  # this will be the helptext for /help
         if user is None:
             user = interaction.user
+        else:
+            interaction.client._connection._users.update({user.id: user._user})
         player = self.getPlayer(user)
         embedVar = discord.Embed(title=f"__{user.display_name}'s statistics__")
-        embedutil.setuser(embedVar, user)
+        embedutil.setuser(embedVar, interaction.user)
         if len(player.statistics) == 0:
             embedVar.add_field(name="Empty", value=f"Looks like this user has not played **{self.GAME_NAME}** before. Encourage them by inviting them to a game!")
         for k, v in sorted(player.statistics.items(), key=lambda k: k[0]):
             embedVar.add_field(name=k, value=v)
         await interaction.send(embed=embedVar)
 
-    def add_help_category(self, cat: HelpCategory):
+    def add_help_category(self, cat: HelpCategory): #TODO make this dynamic so the player can mention commands and not error out saying its not registered yet
         self.help_categories[cat.label] = cat
 
     # @basegamecmd.subcommand(name="help", description="Shows the help manual to this game and the bot.")
@@ -406,11 +417,15 @@ class LobbyView(discord.ui.View):
                     try:
                         await self.lobby.start(interaction)
                     except TypeError as e:
-                        await embedutil.error(interaction, "Game class has no custom init or start method defined. You need to create your own Game class with these methods to start a game. For testing purposes:\n", delete=None)
-                        txt = self.lobby.tojson()
-                        self.cog.logger.debug(f"{len(txt)=}")
-                        for text in TextWrapper(width=1800, break_long_words=False, replace_whitespace=False).wrap(txt):
-                            await interaction.send(f"""```json\n + {text} + ```""", ephemeral=True)
+                        if type(self.lobby.GameClass) is Game:
+                            await embedutil.error(interaction,
+                                                  "Game class has no custom init or start method defined. You need to create your own Game class with these methods to start a game. For testing purposes:\n",
+                                                  delete=None)
+                            txt = self.lobby.tojson()
+                            self.cog.logger.debug(f"{len(txt)=}")
+                            for text in TextWrapper(width=1800, break_long_words=False, replace_whitespace=False).wrap(
+                                    txt):
+                                await interaction.send(f"""```json\n + {text} + ```""", ephemeral=True)
 
                         raise e
         else:
@@ -646,10 +661,10 @@ class Lobby(object):
                 player.team.remove(player)
         try:
             await self.managemsg.delete()
-        except nextcord.errors.NotFound:
+        except (discord.errors.NotFound, discord.errors.HTTPException):
             try:
                 await self.managemsg.edit(embed=discord.Embed(title="Lobby disbanded."), view=None, delete_after=5.0)
-            except nextcord.errors.NotFound:  # what is this try except hell xdd
+            except discord.errors.NotFound:  # what is this try except hell xdd
                 pass
         try:
             await self.messageid.edit(embed=discord.Embed(title="Lobby disbanded.", description=f"Make a new one with {self.cog.startcmd.get_mention(self.cog.TESTSERVER)}"), view=None, delete_after=30.0)
@@ -715,6 +730,8 @@ class Player:
                     setattr(self, "statistics", defaultdict(int))
                     self.statistics.update(v)
                 elif k.endswith("_dt"):    #TODO document this
+                    setattr(self, k, date.fromisoformat(v.removesuffix(" 00:00:00")))
+                elif k.endswith("_dtt"):    #TODO document this
                     setattr(self, k, datetime.fromisoformat(v))
                 elif k in ("name",):
                     continue
@@ -729,7 +746,7 @@ class Player:
 
     @property
     def user(self):
-        return client.get_user(self.userid) or client.fetch_user(self.userid)
+        return client.get_user(self.userid)
 
     @property
     def name(self):

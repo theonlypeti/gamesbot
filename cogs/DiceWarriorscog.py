@@ -21,7 +21,6 @@ class DiceCog(lobby.LobbyCog):
 
         self.logger = client.logger.getChild(f"{self.__module__}")
         self.logger.debug("DiceWarriors cog loaded")
-        self.logger.debug(__class__)
 
         self.rules = """
         Each players takes turn attacking the other player. 

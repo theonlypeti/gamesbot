@@ -174,6 +174,7 @@ To subclass `Player`, you need to create a new class that inherits from `Player`
 ```python
 class DicePlayer(lobby.ClovecePlayer):
     def __init__(self, user: nextcord.User):
+        self.money = 1000
         super().__init__(user)
         self.health = 100
         self.points = 0
@@ -184,6 +185,9 @@ class DicePlayer(lobby.ClovecePlayer):
 ```
 
 In the `__init__` method of your subclass, you need to call the `__init__` method of the superclass (`Player`) using the `super()` function. You need to provide a `nextcord.User` object. You can also add additional attributes to your subclass, like `health` in the `DicePlayer` class.
+
+All attributes after the `super()` call will be set on load, while the attributes above the `super()` call will only be initialized for new players. Returning players will have those attributes above populated from the database (if saved, more on it below).
+Keep persistent attributes above the `super()` call, and volatile ones below.
 
 ## Using the Subclass
 
@@ -512,4 +516,6 @@ self.add_help_category(HelpCategory(label="House Rules",
                                     emoji="🎲",
                                     helptext="There are no rules, the host always wins."))
 ```
+
+If you wish to mention a command in a help category, but `get_mention()` is throwing an error regarding the command not being registered, then define the helptext after the bot is `await wait_until_ready()` 
 
