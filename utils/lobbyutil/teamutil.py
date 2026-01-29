@@ -1,7 +1,9 @@
 from __future__ import annotations
+import random
 from copy import deepcopy
 import emoji
 import nextcord as discord
+from nextcord import Object
 import utils.embedutil
 from utils import Colored
 from utils.lobbyutil.lobbycog import LobbyCog, Player, Lobby, Game, LobbyView, PlayerProt
@@ -84,7 +86,7 @@ class TeamLobby(Lobby):
         self.teamclass = teamclass or Team
         TeamView = type('TeamView', (LobbyView,), {'middlebutton': TeamsButton})  # type: type[LobbyView] #this is so hacky
 
-        TeamView.middlebutton.teams_info_text = self.teams_info_text  # needed cuz it would overwrite for other games as well
+        TeamView.middlebutton.teams_info_text = self.teams_info_text  # needed cuz it would overwrite for other games as well #TODO this should be better
 
         self.init_teams()
         super().__init__(interaction, messageid, cog, private, lobbyView=TeamView, adminView=adminView, game=game, minplayers=minplayers, maxplayers=maxplayers)
@@ -92,7 +94,7 @@ class TeamLobby(Lobby):
     def init_teams(self):
         """Limit teams to the 4 main colors and remove the rest."""
         self.teams = sorted([self.teamclass(col) for col in Colored.Colored.list().values()], key=lambda t: t.color.emoji_square)
-        self.teams = deepcopy(self.teams[2:4] + self.teams[5:7])  #TODO just call/init them by colors
+        self.teams = deepcopy(self.teams[2:4] + self.teams[5:7])  #TODO just call/init them by colors, also somehow option to create more and or custom teams
 
     def readyCondition(self):
         readys = [i.is_ready() for i in self.players]
@@ -100,7 +102,7 @@ class TeamLobby(Lobby):
         return (all(readys)  # everyone is ready
                 and len(self.players) >= self.minplayers  # enough players
                 and all([len(t.players) >= t.minplayers for t in teams])  # enough players in each team
-                and len(teams) >= 2)  # enough teams
+                and len(teams) >= 2)  # enough teams #TODO add minteams?
 
     def show_players(self, embedVar: discord.Embed) -> discord.Embed:
         i = 1
@@ -152,3 +154,28 @@ class TeamPlayer(Player):
 
     def __str__(self):
         return f"{self.team.color.emoji_square if self.team else emoji.emojize(':question_mark:', language='alias')} {self.name} {'(no team)' if not self.team else ''}"
+
+
+class MockPlayer(TeamPlayer):
+    def __init__(self, name: str, cog):
+        super().__init__(Object(id=random.randrange(100_000_000, 999_999_999))) #todo this will not work
+        self._name = name
+        self.cog = cog
+        cog.users.update({self.userid: self})
+        self.ready = True
+
+    @property
+    def name(self):
+        return self._name
+
+    def __eq__(self, other):
+        return other.userid == self.userid
+
+    def tojson(self):
+        self.cog.logger.warning("MockPlayer.toJson() accessed, returning empty json!")
+        return "{}"
+
+    @property
+    def user(self):
+        self.cog.logger.warning("MockPlayer.user accessed, returning bot client's profile! (please don't DM haha)")
+        return self.cog.client.user

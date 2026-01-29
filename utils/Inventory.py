@@ -14,6 +14,7 @@ class Inventory(Paginator):
     MODAL_PLACEHOLDER = "word1, word2, word3, ..."
     MODAL_TITLE = "Add a word"
     DUPLICATE = "This word is already in the inventory! ({})"
+    #TODO class attributes are persistent across instances, so changing them in one instance will change them for all instances. Consider making them instance attributes if needed.
 
     def __init__(self, items: list = None, on_update: Callable[[], Coroutine] = None, **kwargs):
         super().__init__(
@@ -79,7 +80,7 @@ class Inventory(Paginator):
             async def is_duplicate(self, interaction, w, inv_to_check=None):
                 if not inv_to_check:
                     inv_to_check = self.pagi.inv
-                if antimakkcen(w.strip().lower()) not in map(str.lower, map(antimakkcen, inv_to_check)):
+                if antimakkcen(w.strip().lower()) not in map(str.lower, map(antimakkcen, inv_to_check)): #TODO cache?
                     return True
                 else:
                     await embedutil.error(interaction, self.pagi.DUPLICATE.format(w))

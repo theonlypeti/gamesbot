@@ -1,5 +1,6 @@
-from __future__ import annotations
 import random
+from datetime import timedelta, datetime
+
 from tabulate import tabulate
 import utils.embedutil
 import nextcord as discord
@@ -7,7 +8,7 @@ import json
 import emoji
 from utils.Inventory import Inventory
 from utils.lobbyutil.lobbycog import LobbyCog, HelpCategory, Game, AdminView
-from utils.lobbyutil.teamutil import TeamLobby, TeamPlayer, Team
+from utils.lobbyutil.teamutil import TeamLobby, TeamPlayer, Team, MockPlayer
 from utils import Colored
 
 
@@ -49,7 +50,7 @@ class CodenamesCog(LobbyCog):
 
 
 class CodenamesMngmntView(AdminView): #TODO add randomize teams button //but i dont know how many teams to randomize into
-    def __init__(self, lobby: CodenamesLobby):
+    def __init__(self, lobby: "CodenamesLobby"):
         super().__init__(lobby)
         for i in self.children:  # type: discord.ui.Button
             if i.custom_id == "mobilebutton":
@@ -77,13 +78,13 @@ class CodenamesMngmntView(AdminView): #TODO add randomize teams button //but i d
         inv: Inventory = Inventory(self.lobby.words)
         await inv.render(inter, ephemeral=True)
 
-    # @discord.ui.button(label="Testing", style=discord.ButtonStyle.grey) # remove
-    # async def addmockplayers(self, button, inter):
-    #     self.lobby.players.extend([MockPlayer(f"Player {i}") for i in range(1, 4)])
-    #     for player in self.lobby.players[-3:]:
-    #         self.lobby.teams[1].join(player)
-    #     await self.lobby.readyCheck()
-    #     await utils.embedutil.success(inter, "Added 3 mock players")
+    @discord.ui.button(label="Testing", style=discord.ButtonStyle.grey) # remove
+    async def addmockplayers(self, button, inter):
+        self.lobby.players.extend([MockPlayer(f"Player {i}", cog=self.lobby.cog) for i in range(1, 4)])
+        for player in self.lobby.players[-3:]:
+            self.lobby.teams[1].join(player)
+        await self.lobby.readyCheck()
+        await utils.embedutil.success(inter, "Added 3 mock players")
 
 
 class CodenamesLobby(TeamLobby):
@@ -91,15 +92,15 @@ class CodenamesLobby(TeamLobby):
 
         self.teams_info_text = \
             f"""{emoji.emojize(':information_source:', language='alias')} The first person in the team will be responsible for casting the guesses.
-They should discuss these choices with their teammates before picking the words.\n
-{emoji.emojize(':information_source:', language='alias')} The last person in the team will be the spymaster. They will be responsible for giving the clues.
+They should discuss these choices with their teammates (except spymaster) before picking the words.\n
+{emoji.emojize(':information_source:', language='alias')} The last person in the team will be the spymaster. They will be responsible for giving the clue.
 If you wish to be the spymaster, repick your own team to be placed at the end."""
 
         super().__init__(interaction, messageid, cog, private, adminView=CodenamesMngmntView, game=game, minplayers=minplayers, maxplayers=maxplayers)
 
         self.players: list[CodenamesPlayer] = self.players  # this is just to override the typehint of the attr
 
-        with open(client.root + r"/data/codenamesWords.json", "r", encoding="UTF-8") as json_file:
+        with open(self.cog.client.root + r"/data/codenamesWords.json", "r", encoding="UTF-8") as json_file:
             self.words = json.load(json_file)
 
         self.mobile = True
@@ -223,11 +224,12 @@ class CodenamesGame(Game):
             viewObj = discord.ui.View(timeout=300)
             viewObj.add_item(self.WordPicker(self, guesser))
             embedVar = discord.Embed(title=f"It's team {guesser.team.name}'s turn. ",
-                                     description=f"{guesser.name} is guessing.",
+                                     description=f"{guesser.name} is guessing. You have {discord.utils.format_dt(datetime.now() + timedelta(minutes=5), style='R')}",
                                      color=guesser.team.color.dccolor)
         else:
             viewObj = None
             embedVar = None
+
 
         if not self.msg:
             self.msg = await chann.send(self.hiddenstr, embed=embedVar, view=viewObj)
@@ -241,7 +243,7 @@ class CodenamesGame(Game):
             self.lobby.cog.savePlayers()
 
     class ReturnToLobby(discord.ui.View):
-        def __init__(self, game: CodenamesGame, msg: discord.Message = None):
+        def __init__(self, game: "CodenamesGame", msg: discord.Message = None):
             self.game = game
             self.msg = msg
             super().__init__(timeout=360)
@@ -265,7 +267,7 @@ class CodenamesGame(Game):
             await self.msg.edit(view=None)
 
     class WordPicker(discord.ui.StringSelect):
-        def __init__(self, game: CodenamesGame, guesser: CodenamesPlayer):
+        def __init__(self, game: "CodenamesGame", guesser: CodenamesPlayer):
             super().__init__(min_values=1, max_values=25)
             self.logger = game.lobby.cog.client.logger
             self.game = game
@@ -348,25 +350,6 @@ class CodenamesGame(Game):
         self.channel = channel
 
         await self.send_table(channel, guesser)
-
-
-class MockPlayer(CodenamesPlayer):
-    def __init__(self, name):
-        super().__init__(client.get_user(617840759466360842))
-
-        self._name = name
-        self.userid = random.randrange(100_000_000, 999_999_999)
-        client.cogs["CodenamesCog"].users.update({self.userid: self})
-        self.ready = True
-        # self.userid = 617840759466360842
-        # self.color = discord.Color.random()
-
-    @property
-    def name(self):
-        return self._name
-
-    def __eq__(self, other):
-        return other.userid == self.userid
 
 
 def setup(client2):

@@ -21,7 +21,7 @@ from utils.antimakkcen import antimakkcen
 
 start = time_module.perf_counter()  # measuring how long it takes to boot up the bot
 
-VERSION = "1.0rc1"  # whatever you like lol, alpha 0.1, change it as you go on
+VERSION = "1.1rc1"  # whatever you like lol, alpha 0.1, change it as you go on
 PROJECT_NAME = "GamesBot"  # NAME_YOUR_CHILD (note: this name will not show up as the bot name hehe)
 AUTHOR = "@theonlypeti"  # ADD_YOUR_NAME_BE_PROUD
 ADMIN_ID = 617840759466360842
@@ -50,9 +50,9 @@ root = os.getcwd()  # current working directory
 
 intents = discord.Intents.default()
 # intents.presences = True
-# intents.members = True  # needed so the bot can see server members
-# intents.message_content = True
-client = commands.Bot(intents=intents, chunk_guilds_at_startup=False, activity=discord.Game(name="Booting up..."), owner_id=ADMIN_ID)
+intents.members = True  # needed so the bot can see server members
+intents.message_content = True
+client = commands.Bot(intents=intents, chunk_guilds_at_startup=True, activity=discord.Game(name="Booting up..."), owner_id=ADMIN_ID)
 client.logger = baselogger
 client.root = root
 
@@ -123,7 +123,7 @@ async def listgames(interaction: discord.Interaction):
     gamelist = ""
     for c in client.cogs:
         c = client.get_cog(c)
-        if isinstance(c, LobbyCog):
+        if isinstance(c, LobbyCog): # TODO only list cogs that have the guild_ids set to None or the current guild id
             gamelist += f"{c.GAME_NAME} = {c.startcmd.get_mention(interaction.guild)}\n"
     await interaction.send(embed=discord.Embed(title="Available games", description=gamelist))
 
@@ -188,8 +188,6 @@ async def arun(ctx: discord.Interaction, command: str, del_after: int=None):
             await embedutil.success(ctx, "Done.", delete=1)
         else:
             await ctx.send(str(a)[:2000], delete_after=del_after)
-
-
 
 
 #-------------------------------------------------#

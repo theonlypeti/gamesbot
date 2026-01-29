@@ -27,6 +27,7 @@ root = os.getcwd()
 
 
 class FishyCog(commands.Cog):
+    """This is the original implementation before using the lobbycog framework"""
     def __init__(self, client1: discord.Client):
         global logger
         global client
@@ -53,7 +54,7 @@ class FishyCog(commands.Cog):
         from data import fishyquestions
         self.questions = fishyquestions.questions
 
-    @discord.slash_command(description="Commands for the games")
+    @discord.slash_command(name="fishyorig",description="Commands for the games")
     async def fishy(self, interaction):
         pass
 
@@ -66,7 +67,7 @@ class FishyCog(commands.Cog):
         if len(player.stats.keys()) == 0:
             embedVar.add_field(name="Empty", value="Looks like this user has not played **Sounds fishy** before. Encourage them by inviting them to a game!")
         for k,v in player.stats.items():
-            embedVar.add_field(name=k, value=v)
+            embedVar.add_field(name=k, value=str(v))
         await ctx.send(embed=embedVar)
 
     @fishy.subcommand(name="help", description="Shows the help manual to this game and the bot.")

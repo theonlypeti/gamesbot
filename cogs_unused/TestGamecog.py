@@ -1,18 +1,26 @@
 from __future__ import annotations
+import asyncio
 import os
+from datetime import timedelta
 import emoji
 import nextcord as discord
 from utils.Inventory import Inventory
 import utils.lobbyutil.lobbycog as lobby
+from utils.lobbyutil.teamutil import MockPlayer
 
 TESTSERVER = 860527626100015154
 root = os.getcwd()
 
 
 class TestGameCog(lobby.LobbyCog):
+    """Dumping ground of everything testing"""
 
     def __init__(self, client: discord.Client):
-        super().__init__(client, "Charades", playerclass=self.WordsPlayer, lobbyclass=self.WordsLobby, TESTSERVER_ID=TESTSERVER)
+        super().__init__(client, "Charades",
+                         playerclass=self.WordsPlayer,
+                         lobbyclass=self.WordsLobby,
+                         gameclass=MyGame,
+                         TESTSERVER_ID=TESTSERVER)
         # super().__init__(client, "Charades")
         self.client = client
         self.logger = client.logger.getChild(f"{self.__module__}")
@@ -56,10 +64,15 @@ class TestGameCog(lobby.LobbyCog):
                              game=game,
                              minplayers=minplayers,
                              maxplayers=maxplayers)
-            self.players: list[TestGameCog.WordsPlayer] = self.players  # this is just to override the typehint of the attr
             self.words = []
+            mplayer = MockPlayer(name="Sanyi", cog=cog)
+            mplayer.points = 0
+            mplayer.words = ["apple", "banana", "cherry", "date"]
+            mplayer.ready = True
+            self.players.append(mplayer)
+
         def readyCondition(self):  # testing overriding methods
-            return all([len(player.words) > 3 and player.is_ready() for player in self.players])
+            return all([len(player.words) > 3 for player in self.players]) and super().readyCondition()
 
         async def on_join(self, player, inter):
             await player.user.send("Welcome to the game! Please add some words to the inventory.")
@@ -98,6 +111,33 @@ class Addwordsbutton(discord.ui.Button):
         inv = Inventory(user.words, on_update=self.lobby.readyCheck)
         inv.EMPTY_INV = inv.EMPTY_INV + " Please lol."  # test overriding inventory strings
         await inv.render(interaction, ephemeral=True)
+
+class MyGame(lobby.Game):
+    def __init__(self, lobby: lobby.Lobby):
+        self.lobby = lobby
+        self.players = lobby.players
+        self.channel = None
+        self.round = 0
+
+    async def start(self, interaction: discord.Interaction):
+        self.channel = interaction.channel
+        await interaction.channel.send("Game has started!")
+        await self.next_turn()
+
+    async def next_turn(self):
+        self.round += 1
+        await self.channel.send(f"Next turn! {self.round}")
+        timer = lobby.Timer(self, duration=timedelta(seconds=10), name=f"Auto Timer {self.round}")
+        await timer.start()
+        await timer.render(self.channel)
+        if await timer.wait():
+            await self.channel.send(f"{timer.name} ended, proceeding to next turn.")
+        else:
+            await self.channel.send(f"{timer.name} was stopped, proceeding to next turn.")
+        # await self.channel.send()
+        await asyncio.sleep(3)
+        await self.next_turn()
+
 
 
 def setup(client):

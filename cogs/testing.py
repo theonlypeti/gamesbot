@@ -31,34 +31,10 @@ class Testing(commands.Cog):
         inv: Inventory = Inventory(a)
         await inv.render(interaction, ephemeral=True)
 
-    import cooldowns
 
-    ...
-
-    @discord.slash_command(
-        description="Ping command",
-        guild_ids=TESTSERVER
-    )
-    @cooldowns.cooldown(1, 5, bucket=cooldowns.SlashBucket.author)
-    async def ping(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Pong!")
-
-    @cooldowns.cooldown(1, 5, bucket=cooldowns.SlashBucket.author)
-    async def bcallback(self, interaction: discord.Interaction):
-        await interaction.send("pong")
-
-
-    @discord.slash_command(
-        description="Ping command2",
-        guild_ids=TESTSERVER
-    )
-    @cooldowns.cooldown(1, 5, bucket=cooldowns.SlashBucket.author)
-    async def sendb(self, interaction: discord.Interaction):
-        view = discord.ui.View()
-        b = discord.ui.Button(label="hi")
-        b.callback = self.bcallback
-        view.add_item(b)
-        await interaction.send(view=view)
+    @discord.slash_command(name="userselect", guild_ids=TESTSERVER)
+    async def invtest(self, interaction: discord.Interaction, usr: discord.User):
+        await interaction.response.send_message(usr.display_name)
 
 
 def setup(client):

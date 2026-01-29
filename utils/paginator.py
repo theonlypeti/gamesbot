@@ -4,7 +4,7 @@ import emoji
 import nextcord as discord
 import nextcord.errors
 
-
+#TODO add on_update callback to be called after each render?
 class Paginator(discord.ui.View):
     """A paginator for embeds, with a back and forward button, and a definable select.
     :ivar page: The current page.

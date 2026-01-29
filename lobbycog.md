@@ -102,15 +102,13 @@ The `Player` class represents a player in a game lobby. It keeps track of the pl
 
 ## Initialization
 
-The `Player` class takes a `nextcord.User` object or a dictionary of player-like attributes as a parameter when it is initialized. For example:
+The `Player` class takes a `nextcord.User` object or a dictionary of player-like attributes as a parameter when it is initialized. 
+This class is however usually handled by the lobby and game classes and you will not need to initialize it yourself.
+Instead use the getPlayer method of your `LobbyCog` subclass to get the player object for a specific Discord user.
 
 ```python
-player = Player(discorduser = interaction.user)
+player = cog.getPlayer(interaction.user)
 ```
-
-- `discorduser`: The Discord user instance.
-
-This class is however usually handled by the lobby and game classes and you will not need to initialize it yourself.
 
 ## Attributes
 
@@ -184,10 +182,12 @@ class DicePlayer(lobby.ClovecePlayer):
         return f"{self.name} ({len(self.words)} words)" 
 ```
 
-In the `__init__` method of your subclass, you need to call the `__init__` method of the superclass (`Player`) using the `super()` function. You need to provide a `nextcord.User` object. You can also add additional attributes to your subclass, like `health` in the `DicePlayer` class.
+In the `__init__` method of your subclass, you need to call the `__init__` method of the superclass (`Player`) using the `super()` function. You need to provide a `nextcord.User` object.
 
-All attributes after the `super()` call will be set on load, while the attributes above the `super()` call will only be initialized for new players. Returning players will have those attributes above populated from the database (if saved, more on it below).
-Keep persistent attributes above the `super()` call, and volatile ones below.
+You can add additional attributes to your subclass, like `health` in the `DicePlayer` class.
+All attributes after/below the `super()` call will be set on each lobby join, while the attributes above the `super()` call will be loaded from the savefile (freshly initialized only for brand new players.) 
+This means returning players will have those attributes above populated from the database, 
+ergo keep persistent attributes above the `super()` call, and volatile ones below.
 
 ## Using the Subclass
 
@@ -203,11 +203,12 @@ class DiceCog(lobby.LobbyCog):
 
 This will allow you to use the additional attributes and methods you added to your subclass. Also this class's `__str__` method will be used to display the player in the lobby and other methods will be used to check their readiness.
 
-If you wish to permanently save to a file additional information about the player, you can override the `self._important` attribute in your subclass to include the additional attributes.
+Attributes that will be saved to the savefile about the player are determined by the  `self._important` attribute in your subclass.
 
 ```python
 self._important = ["userid", "statistics"] + ["your", "attrs"] # only these attrs will be saved
 ```
+This is handled automatically, if you define the attributes above the `super()` call in your `__init__` method, as demonstrated above in the player subclassing section.
 
 It is recommended to only save attributes that persist between games and are not too large. For example ready or team should be initialized with each new lobby creation and are not saved.
 
@@ -238,21 +239,21 @@ To subclass `Lobby`, you need to create a new class that inherits from `Lobby`.
             super().__init__(inter, messageid, cog, private, lobbyView=TestGameCog.MyButtons)
     
         def readyCondition(self):
-            return all([len(player.words) > 3 and player.is_ready() for player in self.players])
+            return all([len(player.words) > 3 for player in self.players]) and super().readyCondition()
 ```
 
 In the `__init__` method of your subclass, you need to call the `__init__` method of the superclass (`Lobby`) using the `super()` function. You need to provide the following parameters:
  - `inter`: The interaction object that created the lobby.
  - `messageid`: The message id of the lobby message.
  - `cog`: The `LobbyCog` instance that created the lobby.
- - `private`: Whether the lobby is private or not.
+ - `private`: Whether the lobby is private or not. Defaults to False.
  - `lobbyView`: The view class to use for the lobby. If not provided, it will default to `LobbyView`.
  - `adminView`: The view class to use for the admin buttons. If not provided, it will default to `AdminView`.
  - `maxplayers`: The maximum number of players allowed in the lobby. Defaults to 25.
  - `minplayers`: The minimum number of players to start a game. Defaults to 2.
  - `game`: The game Class to use for starting a game.
 
-In this example we have overwritten the `readyCondition` method to check if all players have submitted at least 3 words. It is implied that we are using a subclassed `Player` class with a `words` attribute.
+In this example above we have overwritten the `readyCondition` method to check if all players have submitted at least 3 words. It is implied that we are using a subclassed `Player` class with a `words` attribute.
 
 ## Using the Subclass
 
@@ -274,12 +275,12 @@ This will allow you to use the additional attributes and methods you added to yo
 
 In the context of the Lobby class, there are several methods that are designed to be overridden in subclasses. This allows for custom behavior in different types of lobbies. Here are some examples:
 
-### startCondition
+### readyCondition
 
-You can override the `startCondition` method to check if the lobby can be started. By default it checks if the minimum player count is reached and all players are ready.
+You can override the `readyCondition` method to check if the lobby can be started. By default it checks if the minimum player count is reached and all players are ready.
 
 ```python
-def startCondition(self):
+def readyCondition(self):
     return (len(self.players) >= self.minplayers
             and all([player.is_ready() for player in self.players])
             and all([player.team for player in self.players]))
@@ -287,8 +288,8 @@ def startCondition(self):
 
 In this example we check if the minimum player count is reached, all players are ready and all players have chosen a team.
 
-### on_create?  (\_\_init__)
-
+### on_create  (\_\_init__) 
+<!-- TODO on_create is not an actual method in the Lobby class, so we clarify that __init__ is used instead. -->
 The purpose of this method is fulfilled by the `__init__` method of the Lobby class. It is called when the lobby is created. You can override it to do something custom when the lobby is created.
 Don't forget to call `super().__init__()` in your subclass's `__init__` method.
 
@@ -349,7 +350,9 @@ The `playercount` property returns a string representing the number of players i
 
 ### add_footer
 
-The `add_footer` method is used to add a footer to the lobby embed. In the base Lobby class, it adds a description of each button in the lobby view to the footer. If you want to change what information is included in the footer, you can override this method in your subclass.
+The `add_footer` method is used to add a footer to the lobby embed. In the base Lobby class, it adds a description of each button in the lobby view to the footer. If you want to change what information is included in the footer, you can override this method in your subclass. 
+
+The button descriptions are taken from the button's `callback` method docstrings, so if you customize buttons, you may customize the description there, instead of overwriting this.
 
 # Views
 
@@ -436,7 +439,6 @@ In this example, `MyAdminView` is a subclass of `AdminView`. It adds a button to
 When the game is started using the lobby's start button, the lobby instantiates a subclassed `Game` class from the lobby's `self.game` attribute and calls its `start` method.
 This Game object will have access to the lobby and all of its info. It is recommended to send the game message using `interaction.channel.send` instead of directly responding to the interaction,
 as they cannot be edited after 15 minutes of playing.
-
 
 
 From here on it is up to you how you implement your game and how you work with the lobby and player objects. However it is recommended to use some of the provided methods.

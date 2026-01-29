@@ -54,6 +54,7 @@ class WordsPlayer(Player):
             return True
         else:
             await embedutil.error(interaction, "You need to submit at least 2 words to be ready.")
+            return False
 
 
 class WordsLobby(Lobby):
@@ -178,7 +179,7 @@ class GuesserDropdown(discord.ui.Select):
                 self.game.guesser.statistics["Incorrect guesses"] += 1
                 chosen.statistics["Fooled someone"] += 1
             for k, v in self.game.points.items():
-                embedVar.add_field(name=self.game.getPlayer(k).name, value=v)
+                embedVar.add_field(name=self.game.getPlayer(k).name, value=str(v))
             await interaction.edit(embed=embedVar, view=self.NextButton(self.game))
         else:
             await embedutil.error(interaction, "It is not your turn to guess!")

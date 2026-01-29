@@ -1,6 +1,5 @@
 nextcord
 coloredlogs
-argparse
 python-dotenv
 emoji
 tabulate[widechars]

@@ -32,7 +32,7 @@ class DiceCog(lobby.LobbyCog):
 
         self.add_help_category(lobby.HelpCategory(label="Test category",
                                                  description="This category is for testing the help command",
-                                                 emoji="🎲",
+                                                 emoji="🎲", 
                                                  helptext="This category seems to be working"))
 
         self.add_subcommand("leaderboard", self.leaderboard)
@@ -44,8 +44,8 @@ class DiceCog(lobby.LobbyCog):
 
 
 class DicePlayer(lobby.Player):
-    def __init__(self, user: discord.User):
-        super().__init__(user)
+    def __init__(self, discorduser: discord.User|dict|discord.Member):
+        super().__init__(discorduser)
         self.starthealth = 100
         self.health = 100
 
@@ -53,7 +53,7 @@ class DicePlayer(lobby.Player):
 class DiceGame(lobby.Game):
     def __init__(self, lobby: lobby.Lobby):
         super().__init__(lobby)
-        for p in self.players:  # type: DicePlayer
+        for p in self.players:
             p.statistics["Games Played"] += 1
             p.health = p.starthealth  # in case people are replaying a game again after finishing it
         self.gamemsg: discord.Message = None  # the game message that displays the UI
@@ -79,7 +79,7 @@ class DiceGame(lobby.Game):
         # now here it is advised to send a message with a button asking them to resend the lobby, as interactions expire after 15 minutes and games can last longer than that
         await self.lobby.send_lobby(interaction)  # resend the lobby if they want rematch
 
-    async def show_ui(self, player):
+    async def show_ui(self, player: DicePlayer):
         """Show the game UI and wait for player to take action.
          If the player is AFK, automatically advance to the next player."""
         view = self.DiceView(self)
@@ -88,12 +88,12 @@ class DiceGame(lobby.Game):
         if await view.wait():
             player.statistics["Times AFK'd"] += 1
         else:  # an action was taken
-            ...  # handled by the view's button callbacks
+            ...  # handled by the view's button callbacks #TODO check if afking changes player turn or put swap players below else
 
-    def show_embed(self, p):
+    def show_embed(self, p: DicePlayer):
         embed = discord.Embed(title=f"{p.user.name} it's your turn to roll the dice", color=p.user.color)
-        for p in self.players:
-            embed.add_field(name=p.user.display_name, value=f"Health: {p.health}")
+        for pl in self.players:
+            embed.add_field(name=pl.user.display_name, value=f"Health: {pl.health}")
         return embed
 
     class DiceView(discord.ui.View):
