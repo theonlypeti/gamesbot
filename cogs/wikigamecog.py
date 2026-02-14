@@ -3,8 +3,8 @@ import os
 from utils.Inventory import Inventory
 import nextcord as discord
 import emoji
-from random import randint, choice
-from utils.lobbyutil.lobbycog import LobbyCog, Game, Lobby, Player, LobbyView, PlayerProt
+from random import choice
+from utils.lobbyutil.lobbycog import LobbyCog, Game, Lobby, Player, LobbyView, PlayerProt, HelpCategory
 from utils import embedutil
 
 root = os.getcwd()
@@ -18,22 +18,39 @@ class WikiGameCog(LobbyCog):
         self.rules = """Before starting the game, everyone picks a few interesting wikipedia articles that are less known.
         The wikipedia's [__Random article__](https://en.wikipedia.org/wiki/Special:Random) button may be used but the articles may be less interesting.
          
-        Each turn a guesser is chosen, whose job will be to find the one player telling the truth.   
-        Also each turn an article is picked, from the pool of everyone's submitted articles.
+        Each turn an article is picked, from the pool of everyone's submitted articles.
+        Also each turn a guesser is chosen, whose job will be to find the one player telling the truth.   
          
         Only the person who submitted the article will be able to tell the truth about the chosen article, as they
-        have chosen it and (hopefully) read about it so they can describe it to the guesser.
-        The other players however do not know anything about the article and will have to convince the guesser
-        that they do, by coming up with plausible sounding explanations, stories and facts about the chosen word.
+        have chosen it, and read about it, so they can describe it to the guesser.
+        The other players however do *not* know anything about the article and will have to convince the guesser
+        that they do, by coming up with plausible sounding explanations, stories and facts about the chosen word/article.
         
         After the guesser has listened to everyone's attempts at convincing them of their truth, the guesser has
         to pick a player who they think is telling the truth and is the owner of the article.
         If they guess correctly, they are awarded a point. Otherwise the person who fooled the guesser gets a point."""
 
+        self.add_help_category(HelpCategory(
+            label="House rules", emoji=emoji.emojize(":house:"),
+            description="Additional guidelines for the game",
+            helptext="""
+        Try to pick an article whose title is ambiguous. The wikipedia's random button will often pick very specific articles, eg. train stations, which are obvious from the name alone.
+        Try to pick interesting articles, rather than stubs, or some throwaway filler articles. **Historical events; obscure people/inventions/locations/technical terms are all good article topics**.
+            
+        Optimally the players may **not re-read their article**'s wiki pages when telling about it, or between rounds, so they don't just recite
+        the whole article word for word, providing too much information to the guesser.
+        
+        The guesser should **leave the explainers some time to read the current round's word**, think about it, and come up with a possible explanation. 
+        Interrogating them right away will leave them stuttering, coming up with bad answers, depending on one's deception skill level.
+        
+        The guesser could set up a clock timer or better yet **do only two rounds (without the time pressure) of questioning** towards the players. 
+        This levels the playing field for the explainers, not having to come up with infinitely many details and explanations."""
+        ))
+
         self.credits = """The game is based on the web game show **Two of these people are lying** presented on YouTube by
                  The Technical Difficulties
                  https://www.techdif.co.uk/
-                 https://www.youtube.com/playlist?list=PLfx61sxf1Yz2I-c7eMRk9wBUUDCJkU7H07
+                 https://www.youtube.com/playlist?list=PLrkYtXgEpu5QXFgFJO8SxTMa24wv7b40X
                  Bot and game adaptation created by @theonlypeti
                  https://github.com/theonlypeti"""
 
@@ -46,29 +63,24 @@ class WordsPlayer(Player):
     def __str__(self):
         return f"{self.name} ({len(self.words)} words)"
 
-    def is_ready(self):
-        return self.ready and len(self.words) > 1
-
-    async def can_ready(self, interaction: discord.Interaction, lobby: Lobby) -> bool:
-        if len(self.words) > 1 or self.ready:
+    async def can_ready(self, interaction: discord.Interaction, lobby: WordsLobby) -> bool:
+        if len(self.words) >= lobby.minwords or self.ready:
             return True
         else:
-            await embedutil.error(interaction, "You need to submit at least 2 words to be ready.")
+            await embedutil.error(interaction, f"You need to submit at least {lobby.minwords} words to be ready.")
             return False
 
 
 class WordsLobby(Lobby):
-    def __init__(self, interaction, messageid, cog, private, game, minplayers, maxplayers):
-        super().__init__(interaction, messageid, cog, private,
+    def __init__(self, interaction, cog, private, game, minplayers, maxplayers):
+        super().__init__(interaction, cog, private,
                          lobbyView=WikiLobbyButtons,
                          game=game,
                          minplayers=minplayers,
                          maxplayers=maxplayers)
         self.players: list[WordsPlayer] = self.players  # this is just to override the typehint of the attr
         self.words = []
-
-    def readyCondition(self):
-        return len([player.is_ready() for player in self.players]) > 2
+        self.minwords = 2
 
     @property
     def allwords(self):
@@ -143,7 +155,7 @@ class WikiGame(Game):
         self.channel = channel
         # self.initplayers()
         if not all(player.words for player in self.players):
-            await channel.send(content="Someone has ran out of words. Find and submit new articles to continue the game.", view=self.ReturnButton(self))
+            await channel.send(content="Someone has ran out of words. Find and submit new articles to continue the game.", view=self.ReturnButtonView(self))
             return
         self.guesser = self.players.pop()
         self.players.insert(0, self.guesser)  #TODO this is stupid tbh

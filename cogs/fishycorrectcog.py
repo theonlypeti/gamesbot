@@ -23,8 +23,8 @@ class FishyPlayer(lobby.Player):
 
 
 class FishyLobby(lobby.Lobby):
-    def __init__(self, interaction: discord.Interaction, messageid: discord.Message | None, cog: FishyCog, private=False, game: type[FishyGame] = None, minplayers: int = None, maxplayers: int = None):
-        super().__init__(interaction, messageid, cog, private,
+    def __init__(self, interaction: discord.Interaction, cog: FishyCog, private=False, game: type[FishyGame] = None, minplayers: int = None, maxplayers: int = None):
+        super().__init__(interaction, cog, private,
                          game=FishyGame,
                          minplayers=minplayers,
                          maxplayers=maxplayers)

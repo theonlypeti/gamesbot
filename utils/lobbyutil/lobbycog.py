@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import asyncio
 import logging
 import os
@@ -30,6 +29,9 @@ PlayerClass = Type[PlayerT]
 # TODO on_message_delete if it was a lobby message, remove the lobby, or game message disband it etc
 # TODO document the lobbyview more in the markdown
 # TODO document the Inventory usage more in the markdown, how you should include readycheck in the inventory
+# TODO document MockPlayer
+# consider moving the start game button to admin view as only they can start anyway
+# consider redoing the playercount display and player lister in the lobby embed, as it can be unclear what is minimum and maximum players
 
 
 class LobbyCog(commands.Cog):
@@ -49,6 +51,7 @@ class LobbyCog(commands.Cog):
             self.logger = client.logger.getChild(f"{self.__module__}")
         except AttributeError:
             self.logger = logging.getLogger(f"{self.__module__}")
+            # logging.basicConfig(level=logging.INFO) # why not just basicConfig()
             self.logger.setLevel(logging.DEBUG)
             self.logger.addHandler(logging.StreamHandler())
             self.logger.warning(f"{self.__module__}: No bot.logger found, using root logger. Consider creating a logger using utils.mylogger.py and passing it into the bot/client as bot.logger = yourlogger")
@@ -87,7 +90,7 @@ class LobbyCog(commands.Cog):
         self.help_categories = {}
 
         categories = [
-            HelpCategory("Commands", "Gives help about the game commands.", emoji.emojize(":paperclip:"), None),
+            HelpCategory("Commands", "Gives help about the game commands.", emoji.emojize(":paperclip:"), None), #some IDEs might struggle rendering actual emoji objects
             HelpCategory("Rules", "Explains the rules of this game.", emoji.emojize(":ledger:"), "Rules"),
             HelpCategory("Credits", "Links and about.", emoji.emojize(":globe_with_meridians:"), "Credits")
         ]
@@ -185,7 +188,6 @@ class LobbyCog(commands.Cog):
                       indent=4)
         self.logger.info("saved users")
 
-    # @discord.slash_command(description="Commands for the games", name="placeholder", guild_ids=(self.TESTSERVER, 409081549645152256), force_global=not self.TESTSERVER)
     async def basegamecmd(self, interaction):
         pass
 
@@ -200,7 +202,7 @@ class LobbyCog(commands.Cog):
         player = self.getPlayer(user)
         embedVar = discord.Embed(title=f"__{user.display_name}'s statistics__") #TODO add ability to customize stats embed
         embedutil.setuser(embedVar, interaction.user)
-        if len(player.statistics) == 0:
+        if len(player.statistics) == 0: # probably just check falsy value?
             embedVar.add_field(name="Empty", value=f"Looks like this user has not played **{self.GAME_NAME}** before. Encourage them by inviting them to a game!")
         for k, v in sorted(player.statistics.items(), key=lambda k: k[0]):
             embedVar.add_field(name=k, value=str(v))
@@ -214,7 +216,8 @@ class LobbyCog(commands.Cog):
         """Well you somehow managed to find this command, so good job!"""  # this will be the helpt ext for /help
 
         class HelpTopicSelector(discord.ui.Select):
-            def __init__(self, categories):
+            def __init__(self, categories, logger):
+                self.logger = logger
                 self.categories: dict[str, HelpCategory] = categories
                 opts = [discord.SelectOption(label=c.label, description=c.description, emoji=c.emoji) for c in self.categories.values()] + [discord.SelectOption(label="Close", value="0", emoji=emoji.emojize(":cross_mark:"))]
                 super().__init__(options=opts)
@@ -227,9 +230,25 @@ class LobbyCog(commands.Cog):
                     if c:
                         embed = discord.Embed(title=f"About {c.label}", description=c.helptext)
                         embedutil.setuser(embed, interaction.user)
-                        await interaction.edit(embed=embed)
+                        if c.image:
+                            if c.image.startswith(r"http://") or c.image.startswith(r"https://"):
+                                embed.set_image(url=c.image)
+                                await interaction.edit(embed=embed, attachments=[])
+                            else:
 
-        embedVar = discord.Embed(title="What do you wish to learn about?", description="Pick a topic below:")  #add page indicator to the title if mult pages
+                                try:
+                                    localfile = discord.File(fp=c.image, filename="image.jpg")
+                                except FileNotFoundError:
+                                    errmsg = f"Image file for {c.label} help category ({c.image}) not found."
+                                    await embedutil.error(interaction, errmsg)
+                                    self.logger.error(errmsg)
+                                    return
+                                embedVar.set_image(url="attachment://image.jpg")
+                                await interaction.edit(embed=embed, file=localfile)
+                        else:
+                            await interaction.edit(embed=embed, attachments=[])
+
+        embedVar = discord.Embed(title="What do you wish to learn about?", description="Pick a topic below:")  #add page indicator to the title if mult pages, but i hope there wont be that many xd
         embedutil.setuser(embedVar, interaction.user)
         viewObj = discord.ui.View(timeout=3600)
 
@@ -242,7 +261,7 @@ class LobbyCog(commands.Cog):
         if categories["Credits"].helptext == "Credits":
             self.logger.warning("No credits defined for this game. Do so with yourcog.credits = \"Your credits\"")
 
-        viewObj.add_item(HelpTopicSelector(categories))
+        viewObj.add_item(HelpTopicSelector(categories, self.logger))
         await interaction.send(embed=embedVar, view=viewObj)
 
     # @basegamecmd.subcommand(name="join", description="Join an existing lobby.")
@@ -264,7 +283,6 @@ class LobbyCog(commands.Cog):
         user = self.getPlayer(interaction.user)
         lobby = self.getLobby(user.inLobby)
         if lobby:
-            await lobby.on_leave(user, "left")
             if await lobby.removePlayer(interaction.channel, user):
                 embed = discord.Embed(title=f"Left {lobby.lobbyleader.name}'s lobby.")
                 embedutil.setuser(embed, interaction.user)
@@ -275,6 +293,7 @@ class LobbyCog(commands.Cog):
                     await lobby.managemsg.edit(view=AdminView(lobby))  # removing the player from the kick dropdown
                 except nextcord.errors.NotFound:
                     pass
+                await lobby.on_leave(user, "left")
             else:
                 await embedutil.error(interaction, "Unable to leave. Game ongoing.")  # TODO somehow allow them to leave an ongoing game xd
         else:
@@ -282,7 +301,7 @@ class LobbyCog(commands.Cog):
 
     # @basegamecmd.subcommand(name="start", description=f"Creates a lobby for users to join and to start the game.")
     async def makeLobby(self, interaction: discord.Interaction, private=discord.SlashOption(name="private",
-                                                                                            description="Do you wish to create a public lobby or a private one?",
+                                                                                            description="Anyone can join public lobbies, private ones need invite CODE from you",
                                                                                             required=False,
                                                                                             default="Public",
                                                                                             choices=("Public", "Private")
@@ -302,7 +321,6 @@ class LobbyCog(commands.Cog):
             # lobbymessage = await interaction.channel.send(embed=discord.Embed(title="Generating lobby..."))
             newLobby: Lobby = self.lobbyclass(
                 interaction=interaction,
-                messageid=None, #TODO if this is never provided, probably shouldnt be a param, i need to refactor this in so many places. Also it should be renamed because it is not an ID its the whole message obj
                 cog=self,
                 private=(private == "Private"),
                 game=self.gameclass,
@@ -371,10 +389,10 @@ class LobbyView(discord.ui.View):
         super().__init__(timeout=3600, *args, **kwargs)
         if self.middlebutton:
             self.customize_middle_button(self.middlebutton)
-        b = discord.utils.find(lambda c: c.custom_id == __file__ + "lobbyjoin", self.children)
+        b = discord.utils.find(lambda c: c.custom_id == __file__ + "lobbyjoin", self.children) #TODO check if multiple lobbies can be open at the same time and if this can cause issues, maybe add lobby code to custom id or smth
         b.disabled = self.lobby.private
 
-    @discord.ui.button(style=discord.ButtonStyle.green, emoji=emoji.emojize(":inbox_tray:"), custom_id=__file__ + "lobbyjoin")
+    @discord.ui.button(style=discord.ButtonStyle.green, emoji=emoji.emojize(":inbox_tray:"), custom_id=__file__ + "lobbyjoin") #potentially just name it random() + lobbyjoin and then look for it using lobbyjoin in custom_id?
     async def joinbutton(self, button, interaction):
         """Join lobby"""
         self.cog.logger.debug(f"{interaction.user} clicked join")
@@ -386,8 +404,8 @@ class LobbyView(discord.ui.View):
     async def leavebutton(self, button, interaction):
         """Leave lobby"""
         player = self.cog.getPlayer(interaction.user)
-        await self.lobby.on_leave(player, "left")
         await self.lobby.removePlayer(interaction, player)
+        await self.lobby.on_leave(player, "left")
         self.cog.logger.debug(f"{interaction.user.name} clicked leave")
 
     @discord.ui.button(style=discord.ButtonStyle.grey, emoji=emoji.emojize(":no_entry_sign:", language="alias"), disabled=True, custom_id=__file__ + "lobbymiddle")
@@ -440,6 +458,7 @@ class LobbyView(discord.ui.View):
 
     async def on_timeout(self) -> None:
         await self.lobby.disband()
+        self.lobby.cog.logger.debug("on_timeout fired")
         # del self.cog.lobbies[self.lobby.code]
         del self
 
@@ -459,11 +478,11 @@ class LobbyView(discord.ui.View):
 
 
 class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[xyview]? below too in init
-    def __init__(self, interaction: discord.Interaction, messageid: discord.Message, cog: LobbyCog, private=False, lobbyView: Callable[[Lobby], LobbyView] = None, adminView: Callable[[Lobby], AdminView] = None, game: type[Game] = None, minplayers: int = None, maxplayers: int = None):
+    def __init__(self, interaction: discord.Interaction, cog: LobbyCog, private=False, lobbyView: Callable[[Lobby], LobbyView] = None, adminView: Callable[[Lobby], AdminView] = None, game: type[Game] = None, minplayers: int = None, maxplayers: int = None):
         self.cog: LobbyCog = cog
         self.maxplayers: int = maxplayers or 25  # there is 25 slots in the kick dropdown, can populate 24 because cancel option, but fits perfectly because cant kick yourself. Also embeds can have only 25 fields
         self.minplayers: int = minplayers or 2  # mega lobby could be done, players printed in description, kick using pagi
-        self.GAME_NAME = cog.GAME_NAME # TODO large lobby cog with pagination for players list and different embed etc
+        self.GAME_NAME = cog.GAME_NAME # TODO large lobby cog with pagination for players list and different embed etc, but this assert will be a problem
         self.BASE_CMD_NAME = cog.BASE_CMD_NAME
         assert self.minplayers <= 25 and self.maxplayers <= 25, "Minimum and maximum players must not exceed 25"
         assert self.minplayers <= self.maxplayers, "Minimum players must be <= Maximum players"
@@ -472,12 +491,12 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
         self.players: list[PlayerT] = []
         self.private: bool = private
         while (code := "".join([random.choice(string.ascii_uppercase) for _ in range(4)])) in self.cog.lobbies:
-            self.cog.logger.info(f"generating lobbycode {code}")
+            self.cog.logger.debug(f"generating lobbycode {code}")
             continue
         self.code: str = code
         self.ongoing: bool = False
         self.managemsg: discord.Message | None = None
-        self.messageid = messageid
+        self.messageid: discord.Message | None = None
         self.lobbyleader = interaction.user
         self.cog.lobbies[self.code] = self
         self.lobbyView: Callable[[Lobby], discord.ui.View] = lobbyView or LobbyView
@@ -510,14 +529,15 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
         pass  # default implementation does nothing
 
     def readyCondition(self):
-        """To be overwritten in subclasses, to add custom ready conditions before beign able to start the game.
-        Call the super().readyCondition() to check if all players are ready and minimum player count is met."""
+        """To be overwritten in subclasses, to add custom ready conditions before being able to start the game.
+        After adding custom conditions you can call the super().readyCondition() to check if all players are ready
+        and minimum player count is met."""
 
         readys = [i.is_ready() for i in self.players]
         return all(readys) and len(readys) >= self.minplayers
 
     def show_players(self, embedVar: discord.Embed) -> discord.Embed:
-        """Enumerates players in the lobby embed as fields. Will fail if there's more than 25 players, as that is Discord's embed limitation."""
+        """Enumerates players in the lobby embed as fields. Will fail if there's more than 25 players (not possible), as that is Discord's embed limitation."""
         i = 1
         for i, player in enumerate(self.players, start=1):
             embedVar.add_field(name=f"{i}. {player}", value="Ready? " + (
@@ -558,6 +578,8 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
         lobbymessage = await interaction.channel.send(embed=discord.Embed(title="Generating lobby..."))
         self.messageid = lobbymessage
         await self.messageid.edit(embed=self.show(), view=self.lobbyView(self))
+        if self.ongoing:
+            self.cog.logger.warning("Lobby message sent while game is already ongoing, or lobby.ongoing flag is falsely left set True. This might prevent you from starting a game. Set this attribute to False after ending a game.")
 
     def show(self) -> discord.Embed: #todo potentially rename
         """render the lobby embed"""
@@ -627,7 +649,6 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
                     player = self.cog.playerclass(player) #need to recreate the player object from database, otherwise the attributes from the previous lobby would persist from memory
                     self.cog.users[player.userid] = player
                     self.cog.savePlayers()
-                    await self.on_join(player, interaction)
                     player.inLobby = self.code
                 else:
                     await embedutil.error(interaction, f"You are already in a lobby. Try {self.cog.leavecmd.get_mention(self.cog.TESTSERVER)}", delete=10)
@@ -636,6 +657,7 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
                 # await self.messageid.edit(embed=self.show()) #redundant: gets updated in readyCheck again too so
                 self.players.append(player)
                 await self.readyCheck()
+                await self.on_join(player, interaction) # move this to last row, god knows what breaking code do people write
             else:
                 self.cog.logger.error("ongoing game")  # shouldn't be a possibility, remove buttons from lobbymsg after start
         else:
@@ -730,6 +752,9 @@ class Player:
     player = cog.getPlayer(interaction.user)
     player.ready = True
 
+    When subclassing, add persistent attributes before calling
+    super().init(), and temporary ones that reset each game, after it.
+
     :ivar userid: The discord user id
     :ivar statistics: A dictionary of statistics over the games played like wins, losses, etc.
     :ivar ready: Whether the player is ready
@@ -822,7 +847,7 @@ class Game(ABC, Generic[PlayerT]):
         self.lobby: Lobby[PlayerT] = lobby
 
     @abstractmethod
-    async def start(self, interaction: discord.Interaction):  # i debated long whether i should have Message here in the signature or Interaction, as it is advised to send new messages to the channel directly instad of as an inter response but oh well
+    async def start(self, interaction: discord.Interaction|discord.Message):  # i debated long whether i should have Message here in the signature or Interaction, as it is advised to send new messages to the channel directly instad of as an inter response but oh well
         await interaction.channel.send("Game started with players: " + ", ".join([p.name for p in self.players]))
         await interaction.send("Make sure to do interaction.channel.send instead of directly responding to the interaction as they cannot be edited nor used after 15 minutes of playing", ephemeral=True)
 
@@ -852,13 +877,14 @@ class HelpCategory:
         description (str): The description that will show up beside the label in the select menu
         emoji (str): The emoji that will show up in the select menu
         helptext (str): The helptext that will be shown once the category is selected. This is the actual help text for the category
+        image (str): An optional online image url/local file path that will be shown in the embed when the category is selected
     """
-    def __init__(self, label, description, emoji, helptext):
+    def __init__(self, label, description, emoji, helptext, image: str=None):
         self.label = label
         self.description = description
         self.emoji = emoji
         self.helptext = helptext
-        #TODO add option to add images to the embed
+        self.image = image or None
 
 
 class Timer:
@@ -894,6 +920,7 @@ class Timer:
         self.stoppable = stoppable or True
         self.on_end: Callable[[Timer], ...] = self.mock_end
         self.on_stop: Callable[[Timer, discord.Interaction], ...] = self.mock_stop
+        self.on_start: Callable[[Timer, discord.Interaction], ...] = self.mock_start
 
         self.stopped = False
         self.started_at: datetime = None
@@ -902,16 +929,6 @@ class Timer:
         self._future = None
         self._stop_event = asyncio.Event()
 
-    async def can_stop(self, interaction: discord.Interaction) -> bool:
-        """Checks if the timer can be stopped by the interaction user."""
-        if not self.stoppable:
-            await embedutil.error(interaction, "This timer cannot be stopped.")
-            return False
-        elif interaction.user.id != self.game.lobby.lobbyleader.id:
-            await embedutil.error(interaction, "Only the lobby leader can stop the timer.")
-            return False
-        else:
-            return True
 
     async def stop(self, interaction: discord.Interaction):
         """Stops the countdown. Include the interaction to check permissions."""
@@ -932,10 +949,12 @@ class Timer:
         self.started_by = interaction.user if interaction else None
         self._stop_event.clear()
         self._future = asyncio.create_task(self._run_timer())
+        if self.on_start:
+            await self.on_start(self, interaction)
 
     async def _run_timer(self):
         try:
-            await asyncio.wait_for(self._stop_event.wait(), timeout=self.duration.seconds)
+            await asyncio.wait_for(self._stop_event.wait(), timeout=self.duration.total_seconds())
         except asyncio.TimeoutError:
             pass # Timer finished naturally
 
@@ -944,7 +963,7 @@ class Timer:
                 await self.on_end(self)
 
     async def can_start(self, interaction: discord.Interaction) -> bool:
-        """Checks if the timer can be started by the interaction user."""
+        """Checks if the timer can be started by the interaction user. You may overwrite this for custom games."""
         if self.started_at is not None:
             await embedutil.error(interaction, "Timer has already started.")
             return False
@@ -954,10 +973,21 @@ class Timer:
         else:
             return True
 
+    async def can_stop(self, interaction: discord.Interaction) -> bool:
+        """Checks if the timer can be stopped by the interaction user. You may overwrite this for custom games."""
+        if not self.stoppable:
+            await embedutil.error(interaction, "This timer cannot be stopped.")
+            return False
+        elif interaction.user.id != self.game.lobby.lobbyleader.id:
+            await embedutil.error(interaction, "Only the lobby leader can stop the timer.")
+            return False
+        else:
+            return True
+
     @property
     def ended(self):
         """Returns whether the timer has ended."""
-        return self.started_at is not None and (discord.utils.utcnow() - self.started_at).total_seconds() >= self.duration.seconds
+        return self.started_at is not None and (discord.utils.utcnow() - self.started_at).total_seconds() >= self.duration.total_seconds()
 
     @property
     def timestamp(self):
@@ -981,9 +1011,15 @@ class Timer:
         # await game.next_turn()
 
     async def mock_stop(self, timer: "Timer", interaction: discord.Interaction):
-        """Example function that runs when the timer was stopped by an user. Supply your own end function"""
+        """Example function that runs when the timer was stopped by an user. Supply your own function to run on stop"""
         game: Game = timer.game
-        await game.channel.send(f"Timer stopped by {self.stopped_by.mention}!")
+        await game.channel.send(f"Timer stopped by {self.stopped_by.mention}!", delete_after=5)
+        # await game.next_turn()
+
+    async def mock_start(self, timer: "Timer", interaction: discord.Interaction):
+        """Example function that runs when the timer was started by an user. Supply your own function to run on start"""
+        game: Game = timer.game
+        await game.channel.send(f"Timer started by {self.started_by.mention}!", delete_after=5)
         # await game.next_turn()
 
     def get_embed(self):
@@ -1007,10 +1043,10 @@ class Timer:
             if self.timer.stoppable:
                 await interaction.edit(embed=self.timer.get_embed(),
                                        view=Timer.TimerStopView(self.timer),
-                                       delete_after=self.timer.duration.seconds)
+                                       delete_after=self.timer.duration.total_seconds())
             else:
                 await interaction.edit(embed=self.timer.get_embed(),
-                                       delete_after=self.timer.duration.seconds,
+                                       delete_after=self.timer.duration.total_seconds(),
                                        view=None)
 
     class TimerStopView(discord.ui.View):
@@ -1034,7 +1070,7 @@ class Timer:
             else:
                 viewObj = None
 
-        await channel.send(embed=embed, view=viewObj, delete_after=(self.duration.seconds + 1 if self.started_at else None))
+        await channel.send(embed=embed, view=viewObj, delete_after=(self.duration.total_seconds() + 1 if self.started_at else None))
 
     async def wait(self):
         """Waits for the timer to complete. Returns True if the timer ended naturally, False if it was stopped."""

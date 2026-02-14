@@ -134,9 +134,9 @@ class FishyAdminView(lobby.AdminView):
 # Moved and adapted from the nested FishyCog.Lobby
 class FishyLobby(lobby.Lobby):
     # The __init__ signature should match the base lobby.Lobby
-    def __init__(self, interaction: discord.Interaction, messageid: discord.Message | None, cog: FishyCog, private=False, game: type[FishyGame] = None, minplayers: int = None, maxplayers: int = None):
+    def __init__(self, interaction: discord.Interaction, cog: FishyCog, private=False, game: type[FishyGame] = None, minplayers: int = None, maxplayers: int = None):
         # Pass custom views and game class to the super constructor
-        super().__init__(interaction, messageid, cog, private,
+        super().__init__(interaction, cog, private,
                          lobbyView=FishyLobbyView, # Use the new FishyLobbyView
                          adminView=FishyAdminView,   # Use the new FishyAdminView
                          game=FishyGame,         # Use the new FishyGame
@@ -244,7 +244,7 @@ class FishyGame(lobby.Game):
         self.guesser = self.players[0] # The new guesser is the first player
 
         self.truth = choice(self.explainers)
-        logger.debug(f"{self.truth.name=}")
+        self.lobby.cog.logger.debug(f"{self.truth.name=}")
         question = choice(self.questions)
         self.questions.remove(question)
 
@@ -351,7 +351,7 @@ class GuesserDropdown(discord.ui.Select):
             await embedutil.error(interaction, "It is not your turn to guess!", ephemeral=True) # Use ephemeral for errors
 
 
-class NextButton(discord.ui.View): # TODO if the guesser hasnt made a move in a while this should appear
+class NextButton(discord.ui.View):
     def __init__(self, game: FishyGame): # Type hint with FishyGame
         super().__init__(timeout=None)
         self.game = game

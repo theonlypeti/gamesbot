@@ -1,6 +1,5 @@
 from __future__ import annotations
 import random
-from copy import deepcopy
 import emoji
 import nextcord as discord
 from nextcord import Object
@@ -59,7 +58,7 @@ class TeamsButton(discord.ui.Button):
         await interaction.send(
             content=self.teams_info_text,
             view=viewObj, ephemeral=True)
-        await self.lobby.readyCheck()
+        await self.lobby.readyCheck() # is this needed? nothing changes on this button press
 
 
 class TeamSelector(discord.ui.Select):
@@ -75,28 +74,43 @@ class TeamSelector(discord.ui.Select):
         player = self.cog.getPlayer(inter.user)
         team.join(player)
         await self.lobby.readyCheck()
-        await inter.edit(view=None, content="Joined team " + team.name, delete_after=5.0)  # TODO make this a proper embed
+        embedVar = discord.Embed(description=f"You have joined team {team.name}", color=team.color.dccolor)
+        await inter.edit(view=None, content=None, embed=embedVar, delete_after=5.0)
 
 
-class TeamLobby(Lobby):
+class TeamLobby(Lobby): #TODO add randomize teams button //but i dont know how many teams to randomize into, only if i have minplayers and maxplayers for teams
+    """Lobby with extended team support. Players must join a team to ready up. Be aware empty teams are not removed on game start!
+
+    New notable attributes:
+    :ivar teamclass: The class used to create teams, defaults to Team
+    :ivar teamcolors: list[str]: List of color strings, corresponding to Colored class colors, used to create teams, defaults to ["red", "blue", "green", "yellow"]
+    :ivar teams: List of teams in the lobby, created from teamcolors and teamclass using self.init_teams()
+    """
     teams_info_text = "Pick a team"
 
-    def __init__(self, interaction: discord.Interaction, messageid: discord.Message, cog: LobbyCog, private=False, adminView: discord.ui.View = None, game: type[Game] = None, minplayers: int = None, maxplayers: int = None, teamclass: type[Team] = None):
+    def __init__(self, interaction: discord.Interaction, cog: LobbyCog, private=False, adminView: discord.ui.View = None, game: type[Game] = None, minplayers: int = None, maxplayers: int = None, teamclass: type[Team] = None):
         self.cog = cog
         self.teamclass = teamclass or Team
-        TeamView = type('TeamView', (LobbyView,), {'middlebutton': TeamsButton})  # type: type[LobbyView] #this is so hacky
+        self.teamcolors = ["red", "blue", "green", "yellow"] #Colored.Colored.list() to get all available color names
+        self.teams: list[Team] = self.init_teams(self.teamcolors)
 
+        TeamView = type('TeamView', (LobbyView,), {'middlebutton': TeamsButton})  # type: type[LobbyView] #this is so hacky
         TeamView.middlebutton.teams_info_text = self.teams_info_text  # needed cuz it would overwrite for other games as well #TODO this should be better
 
-        self.init_teams()
-        super().__init__(interaction, messageid, cog, private, lobbyView=TeamView, adminView=adminView, game=game, minplayers=minplayers, maxplayers=maxplayers)
+        super().__init__(interaction, cog, private, lobbyView=TeamView, adminView=adminView, game=game, minplayers=minplayers, maxplayers=maxplayers)
 
-    def init_teams(self):
+    def init_teams(self, teamcolors: list[str]) -> list[Team]:
         """Limit teams to the 4 main colors and remove the rest."""
-        self.teams = sorted([self.teamclass(col) for col in Colored.Colored.list().values()], key=lambda t: t.color.emoji_square)
-        self.teams = deepcopy(self.teams[2:4] + self.teams[5:7])  #TODO just call/init them by colors, also somehow option to create more and or custom teams
+        teams = []
+        for c in teamcolors:
+            col = Colored.Colored.get_color(c)
+            team = self.teamclass(col)
+            teams.append(team)
+        return teams
+        #TODO document this how to manage Teams
 
     def readyCondition(self):
+        """Teams specific check. Check if all players are ready, there are enough players, and each team has enough players."""
         readys = [i.is_ready() for i in self.players]
         teams = [t for t in self.teams if t]  # remove empty teams
         return (all(readys)  # everyone is ready
@@ -114,10 +128,6 @@ class TeamLobby(Lobby):
                                        inline=False)
                     i += 1
 
-                # if len(team.players) > 1:
-                #     EmbedVar.set_field_at(i-n-1, name=EmbedVar.fields[i-n-1].name + " (guesser)", value=EmbedVar.fields[i-n-1].value, inline=False)
-                #     EmbedVar.set_field_at(len(EmbedVar.fields)-1, name=EmbedVar.fields[-1].name + " (spymaster)", value=EmbedVar.fields[-1].value, inline=False)
-
         for n, player in enumerate(filter(lambda p: not p.team, self.players), start=1):
             embedVar.add_field(name=f"{i}. {player}", value="Ready? " + (
             emoji.emojize(":cross_mark:"), emoji.emojize(":check_mark_button:"))[bool(player.ready)], inline=False)
@@ -131,6 +141,7 @@ class TeamLobby(Lobby):
 
 class TeamPlayer(Player):
     """
+    Notable new attributes:
     :ivar team: The team the player is in
     """
     def __init__(self, discorduser):
@@ -158,7 +169,7 @@ class TeamPlayer(Player):
 
 class MockPlayer(TeamPlayer):
     def __init__(self, name: str, cog):
-        super().__init__(Object(id=random.randrange(100_000_000, 999_999_999))) #todo this will not work
+        super().__init__(Object(id=random.randrange(100_000_000, 999_999_999))) #todo this will not work. why?
         self._name = name
         self.cog = cog
         cog.users.update({self.userid: self})

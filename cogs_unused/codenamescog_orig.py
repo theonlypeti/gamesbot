@@ -246,7 +246,7 @@ class CodenamesCog(commands.Cog):
                 await self.lobby.messageid.edit(embed=self.lobby.show())
             await inter.edit(view=self.cog.MngmntView(self.lobby, self.cog))
 
-    class MngmntView(discord.ui.View): #TODO add randomize teams button //but i dont know how many teams to randomize into
+    class MngmntView(discord.ui.View):
         def __init__(self, lobby, cog):
             self.lobby: CodenamesCog.Lobby = lobby
             self.cog: CodenamesCog = cog
@@ -469,7 +469,6 @@ class CodenamesCog(commands.Cog):
                     return False
             else:
                 logger.info("game ongoing")
-                #TODO allow leaving xd
                 return False
 
         async def disband(self):
@@ -515,11 +514,11 @@ class CodenamesCog(commands.Cog):
                 await ctx.send(embed=discord.Embed(title=f"Left {lobby.lobbyleader.name}'s lobby.", color=ctx.user.color), ephemeral=True)
                 await lobby.managemsg.edit(view=self.MngmntView(lobby, self))  # removing the player from the kick dropdown
             else:
-                await embedutil.error(ctx, "Unable to leave.") #TODO somehow allow them to leave an ongoing game xd
+                await embedutil.error(ctx, "Unable to leave.")
         else:
             await embedutil.error(ctx, "You are not currently in a lobby.")
 
-    def getPlayer(self, dcUser: int | discord.Member | "CodenamesCog.ClovecePlayer"):
+    def getPlayer(self, dcUser: "int | discord.Member | CodenamesCog.ClovecePlayer"):
         if isinstance(dcUser, int):
             lookingfor = dcUser
         elif isinstance(dcUser, discord.Member):

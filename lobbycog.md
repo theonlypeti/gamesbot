@@ -203,7 +203,7 @@ class DiceCog(lobby.LobbyCog):
 
 This will allow you to use the additional attributes and methods you added to your subclass. Also this class's `__str__` method will be used to display the player in the lobby and other methods will be used to check their readiness.
 
-Attributes that will be saved to the savefile about the player are determined by the  `self._important` attribute in your subclass.
+Internally, attributes that will be saved to the savefile about the player are determined by the  `self._important` attribute in your subclass.
 
 ```python
 self._important = ["userid", "statistics"] + ["your", "attrs"] # only these attrs will be saved
@@ -235,8 +235,8 @@ To subclass `Lobby`, you need to create a new class that inherits from `Lobby`.
 
 ```python
     class WordsLobby(lobby.Lobby):
-        def __init__(self, inter, messageid, cog, private):
-            super().__init__(inter, messageid, cog, private, lobbyView=TestGameCog.MyButtons)
+        def __init__(self, inter, cog, private):
+            super().__init__(inter, cog, private, lobbyView=TestGameCog.MyButtons)
     
         def readyCondition(self):
             return all([len(player.words) > 3 for player in self.players]) and super().readyCondition()
@@ -244,7 +244,6 @@ To subclass `Lobby`, you need to create a new class that inherits from `Lobby`.
 
 In the `__init__` method of your subclass, you need to call the `__init__` method of the superclass (`Lobby`) using the `super()` function. You need to provide the following parameters:
  - `inter`: The interaction object that created the lobby.
- - `messageid`: The message id of the lobby message.
  - `cog`: The `LobbyCog` instance that created the lobby.
  - `private`: Whether the lobby is private or not. Defaults to False.
  - `lobbyView`: The view class to use for the lobby. If not provided, it will default to `LobbyView`.
@@ -356,19 +355,18 @@ The button descriptions are taken from the button's `callback` method docstrings
 
 # Views
 
-The lobby has a `lobbyView` which is a subclass of `nextcord.ui.View`. It is used to display the buttons. The view is automatically updated when the lobby is updated.
-The other view is a `adminView` which is a subclass of `nextcord.ui.View`. It is used to display the admin buttons. It is only displayed to the lobbyleader and is used to kick players and add other functionalities.
+The lobby has a `lobbyView` which is a subclass of `nextcord.ui.View`. It is used to display the lobby buttons. The view is automatically updated when the lobby is updated.
+The other view is a `adminView` which is also a subclass of `nextcord.ui.View`. It is used to display the admin buttons and is only displayed to the lobbyleader to kick players and add other functionalities.
 Both of these views take the lobby as a parameter.
 
 ## lobbyView
 
-The `LobbyView` class in the `lobbycog.py` file is used to display the main buttons for the lobby. This includes buttons for joining, leaving, readying up, and starting the game. The view is automatically updated when the lobby is updated.
+The `LobbyView` class in the `lobbycog.py` file is used to display the main buttons for the lobby. This includes buttons for joining, leaving, readying up, and starting the game. 
 
-If you want to customize the `LobbyView` for a specific type of lobby, you can create a subclass of `LobbyView`. This allows you to add additional buttons or change the behavior of existing buttons.
+If you want to customize the `LobbyView` for a specific type of lobby, you can create a subclass of `LobbyView`. This allows you to add additional buttons or change the behavior of existing buttons (like change ready or join conditions).
 
 To create a subclass of `LobbyView`, you need to define a new class that inherits from `LobbyView`. In the `__init__` method of your subclass, you can add or modify buttons.
 
-Here is an example of how you might do this:
 
 ```python
 class MyLobbyView(LobbyView):
@@ -410,8 +408,8 @@ Here is an example of how you might do this:
 
 ```python
 class MyLobby(lobby.Lobby):
-    def __init__(self, inter, messageid, cog, private):
-        super().__init__(inter, messageid, cog, private, lobbyView=MyLobbyView)
+    def __init__(self, inter, cog, private):
+        super().__init__(inter, cog, private, lobbyView=MyLobbyView)
 ```
 
 In this example, `MyLobby` is a subclass of `Lobby`. When creating a new `MyLobby` instance, it uses `MyLobbyView` for the lobby view.
@@ -447,7 +445,7 @@ From here on it is up to you how you implement your game and how you work with t
 
 Players love keeping track of statistics so i encourage saving interesting or wacky counters or high scores using `player.statistics["yourstat"] += 1` and then calling `game.savePlayers()` at the end of the game.
 
-`savePlayers()` saves any changes to the players' statistics and other important attributes. You can change the `self._important` attribute in your subclassed `Player` class to include more attributes.
+`savePlayers()` saves any changes to the players' statistics and other important attributes. You can change the `self._important` attribute in your subclassed `Player` class to include more attributes, or define these attributes before calling `super().__init__()` in the player's `__init__` method, as explained in the Player class section.
 
 
 To get a Player object from a user id or `interaction.user` you can use `self.getPlayer(userid/userobj)`. 
@@ -479,7 +477,7 @@ The `TeamLobby` class modifies the lobby buttons to include a team selector and 
 # Help categories
 
 The `LobbyCog` class automatically creates 3 help categories for your game. These can be viewed using the `/BASE_GAME_CMD help` command. They include a help topic for the game `commands`, the `rules` and `credits`.
-The credits and rules category are empty and to be filled by the game author, the game commands category is automatically filled with the game's commands and their descriptions.
+The credits and rules category are empty and to be filled by the game author, while the game commands category is automatically filled with the game's commands and their descriptions.
 
 ## Adding commands to the help command
 
@@ -519,5 +517,110 @@ self.add_help_category(HelpCategory(label="House Rules",
                                     helptext="There are no rules, the host always wins."))
 ```
 
-If you wish to mention a command in a help category, but `get_mention()` is throwing an error regarding the command not being registered, then define the helptext after the bot is `await wait_until_ready()` 
+When you want to mention a command in a help category, it could happen that `command.get_mention()` will throw an error regarding the command not being registered. 
+This happens because the commands are registered after all the cogs are loaded, but the helptext is defined before the bot logs in and registers all the commands.
+You would need to define the helptext after the bot is `await wait_until_ready()`, or generate the helptext dynamically when called.
 
+# Timer class
+
+The `Timer` class provides a lightweight, asyncio-based countdown timer used throughout games and lobbies.
+
+## Purpose
+
+Use `Timer` to implement turn timers, countdowns, or other timed events inside your game's `Game` instance. It integrates with the lobby/game model and provides small interactive views (Start/Stop buttons) as well as programmatic control.
+
+## Key behaviours
+
+- `start(interaction: Optional[Interaction])` schedules the countdown as a background asyncio task. If an `interaction` is supplied, permission checks are performed with `can_start`.
+- `stop(interaction: Interaction)` signals the timer to stop early and runs the `on_stop` hook.
+- `wait()` can be awaited to block until the timer finishes (either by timeout or stop) and returns `True` if finished naturally or `False` if stopped.
+- `render(channel_or_interaction)` sends a simple embed with Start/Stop controls that honor `stoppable`.
+
+## Constructor
+
+```py
+Timer(game: Game, duration: timedelta, name: str = None, stoppable: bool = True)
+```
+
+Parameters:
+
+- `game` – the `Game` instance that owns the timer (used by the default hook implementations to post messages to the channel).
+- `duration` – a `timedelta` describing how long the countdown should run.
+- `name` – optional human-readable title used in the built-in embed (defaults to "Timer").
+- `stoppable` – whether users are allowed to stop the timer via the UI (defaults to `True`).
+
+Attributes (important ones):
+
+- `game` – owning `Game` instance.
+- `duration` – countdown `timedelta`.
+- `name`, `description` – used for the embed content.
+- `stoppable` – if `False`, the built-in Stop button will not be provided, and also no other custom written stopping methods will work.
+- `started_at` – UTC datetime when the timer was started (or `None`).
+- `started_by` – `discord.User` that started the timer (if any).
+- `stopped` – `False` if running/not started, or the UTC datetime when stopped.
+- `stopped_by` – the user who stopped the timer (if stopped).
+
+## Hooks
+
+Replace these attributes with coroutines to customize behaviour when the timer starts, stops, or ends:
+
+- `on_start(timer, interaction)` – called after `start()` completes; default: `mock_start` sends a small message to the game's channel.
+- `on_stop(timer, interaction)` – called after a user stops the timer; default: `mock_stop` notifies the channel who stopped it.
+- `on_end(timer)` – called when the timer ends naturally; default: `mock_end` posts the timer embed to the game's channel.
+
+The default hooks are intentionally simple; swap them for your game logic (for instance: advance turn, perform penalties, or pick next player).
+
+## Permission checks
+
+The class provides two overridable permission methods:
+
+- `can_start(interaction)` – by default only the lobby leader may start the timer; override to change behaviour, for example next turn's player.
+- `can_stop(interaction)` – by default only the lobby leader may stop the timer; override to change behaviour, for example current turn's player.
+
+Both methods default to sending an ephemeral error via `embedutil.error` if the action is disallowed.
+
+## Methods summary
+
+- `start(interaction: Optional[Interaction])` – start the timer. If `interaction` is provided, permission is checked and `on_start` is invoked.
+- `stop(interaction: Interaction)` – stop the timer early. Returns `True` if the timer is stopped by this call.
+- `render(channel_or_interaction)` – send the default timer embed with interactive Start/Stop buttons.
+- `wait()` – await the timer's completion. Returns `True` if ended naturally, `False` if stopped.
+- `get_embed()` – returns the built-in `nextcord.Embed` representing the timer's current state. Can be edited for custom implementation or used premade for custom rendering.
+
+## Example usage
+
+Interactive (send UI with a Start button):
+
+```py
+from datetime import timedelta
+
+turn_timer = Timer(game=self, duration=timedelta(seconds=30), name="Turn Timer")
+await turn_timer.render(interaction)  # sends an embed with a "Start Timer" button
+```
+
+Programmatic start & wait:
+
+```py
+await turn_timer.start()  # start automatically without waiting for a user interaction
+finished_naturally = await turn_timer.wait()
+if finished_naturally:
+    # proceed to next turn, noone interrupted it
+else:
+    # timer stopped early by someone, handle accordingly
+```
+
+Custom hooks:
+
+```py
+async def on_time_up(timer: Timer):
+    # called when time runs out
+    await timer.game.next_turn()
+
+turn_timer.on_end = on_time_up
+```
+
+## Notes
+
+- By default, only the lobby leader may start/stop the timer; override `can_start`/`can_stop` to relax this.
+- Calling `start()` while the timer is already running is rejected by default (sends an ephemeral error).
+- `render()` uses the built-in `TimerStartView` / `TimerStopView`. Messages sent by the UI may be auto-deleted after the duration to keep channels tidy.

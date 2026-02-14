@@ -1,6 +1,5 @@
 import random
 from datetime import timedelta, datetime
-
 from tabulate import tabulate
 import utils.embedutil
 import nextcord as discord
@@ -49,7 +48,7 @@ class CodenamesCog(LobbyCog):
             The clue may be for example (Apple, 2) for the words: "pie" and "tree". """))
 
 
-class CodenamesMngmntView(AdminView): #TODO add randomize teams button //but i dont know how many teams to randomize into
+class CodenamesMngmntView(AdminView):
     def __init__(self, lobby: "CodenamesLobby"):
         super().__init__(lobby)
         for i in self.children:  # type: discord.ui.Button
@@ -60,6 +59,8 @@ class CodenamesMngmntView(AdminView): #TODO add randomize teams button //but i d
 
     @discord.ui.button(label="Mobile UI", style=discord.ButtonStyle.green, emoji=emoji.emojize(":mobile_phone:", language="alias"), custom_id="mobilebutton")
     async def mobilebutton(self, button: discord.ui.Button, inter: discord.Interaction):
+        """ANSII color codes do not render colored text on mobile,
+        will use colorful emojis instead (this may break table formatting though)"""
         self.lobby.mobile = not self.lobby.mobile
         button.style = discord.ButtonStyle.red if not self.lobby.mobile else discord.ButtonStyle.green
         button.emoji = emoji.emojize(":no_mobile_phones:", language="alias") if not self.lobby.mobile else emoji.emojize(":mobile_phone:", language="alias")
@@ -82,13 +83,13 @@ class CodenamesMngmntView(AdminView): #TODO add randomize teams button //but i d
     async def addmockplayers(self, button, inter):
         self.lobby.players.extend([MockPlayer(f"Player {i}", cog=self.lobby.cog) for i in range(1, 4)])
         for player in self.lobby.players[-3:]:
-            self.lobby.teams[1].join(player)
+            self.lobby.teams[1].join(player)    
         await self.lobby.readyCheck()
         await utils.embedutil.success(inter, "Added 3 mock players")
 
 
 class CodenamesLobby(TeamLobby):
-    def __init__(self, interaction, messageid, cog, private, game, minplayers, maxplayers):
+    def __init__(self, interaction, cog, private, game, minplayers, maxplayers):
 
         self.teams_info_text = \
             f"""{emoji.emojize(':information_source:', language='alias')} The first person in the team will be responsible for casting the guesses.
@@ -96,7 +97,7 @@ They should discuss these choices with their teammates (except spymaster) before
 {emoji.emojize(':information_source:', language='alias')} The last person in the team will be the spymaster. They will be responsible for giving the clue.
 If you wish to be the spymaster, repick your own team to be placed at the end."""
 
-        super().__init__(interaction, messageid, cog, private, adminView=CodenamesMngmntView, game=game, minplayers=minplayers, maxplayers=maxplayers)
+        super().__init__(interaction, cog, private, adminView=CodenamesMngmntView, game=game, minplayers=minplayers, maxplayers=maxplayers)
 
         self.players: list[CodenamesPlayer] = self.players  # this is just to override the typehint of the attr
 

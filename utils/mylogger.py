@@ -1,5 +1,5 @@
 import logging
-from functools import partial, partialmethod
+from functools import partialmethod
 from logging.handlers import WatchedFileHandler
 from datetime import datetime
 from os import makedirs

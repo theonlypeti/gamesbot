@@ -13,7 +13,7 @@ class Inventory(Paginator):
     MODAL_LABEL = "Enter words separated by comma (,)"
     MODAL_PLACEHOLDER = "word1, word2, word3, ..."
     MODAL_TITLE = "Add a word"
-    DUPLICATE = "This word is already in the inventory! ({})"
+    DUPLICATE = "This word is already submitted by someone! ({})"
     #TODO class attributes are persistent across instances, so changing them in one instance will change them for all instances. Consider making them instance attributes if needed.
 
     def __init__(self, items: list = None, on_update: Callable[[], Coroutine] = None, **kwargs):

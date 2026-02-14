@@ -57,7 +57,7 @@ class Paginator(discord.ui.View):
             ch.disabled = True
         try:
             await self.msg.edit(view=self)
-        except discord.errors.NotFound:
+        except (discord.errors.NotFound, discord.errors.HTTPException):
             pass
 
     def mergeview(self, view: discord.ui.View, row=2):

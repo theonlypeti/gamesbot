@@ -578,7 +578,7 @@ class WikiGame():
             await self.returnToLobby()
             return
         self.guesser = self.players.pop()
-        self.players.insert(0, self.guesser)  #TODO this is stupid tbh
+        self.players.insert(0, self.guesser)
         self.truth = choice(self.explainers)
         self.word = choice(self.truth.words)
         self.truth.words.remove(self.word)

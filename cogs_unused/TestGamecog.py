@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import timedelta
+from logging import Logger
 import emoji
 import nextcord as discord
 from utils.Inventory import Inventory
@@ -21,12 +22,21 @@ class TestGameCog(lobby.LobbyCog):
                          lobbyclass=self.WordsLobby,
                          gameclass=MyGame,
                          TESTSERVER_ID=TESTSERVER)
-        # super().__init__(client, "Charades")
         self.client = client
-        self.logger = client.logger.getChild(f"{self.__module__}")
-        self.logger.log(25, "hi")
-        self.other_commands = {self.testcmd2.name: self.testcmd2}
+        self.logger: Logger = client.logger.getChild(f"{self.__module__}")
+        self.logger.event("hi")
+
         self.add_subcommand("ping", self.testtest, "Just testing")
+        self.add_help_category(lobby.HelpCategory(label="Testing Category",
+                                                  description="Just testing", emoji="🧪",
+                                                  helptext="This is a test category for testing purposes.",
+                                                  image=fr"data/amogus.png"))
+        self.add_help_category(lobby.HelpCategory(label="Testing Category 2",
+                                                  description="Just testing 2", emoji="🧪",
+                                                  helptext="This is a test category for testing online image.",
+                                                  image=fr"https://cdn.discordapp.com/avatars/617840759466360842/4469b4fbf681114f046e62f08e8a22e3.png?size=1024"))
+
+        self.other_commands = {self.testcmd2.name: self.testcmd2}
 
     async def testtest(self, interaction: discord.Interaction):  # testing adding subcommand to main game command
         """Pong!"""
@@ -47,6 +57,7 @@ class TestGameCog(lobby.LobbyCog):
         """nor this does not appear"""
         await interaction.send("Testing3")
 
+
     class WordsPlayer(lobby.Player):
 
         def __init__(self, user: discord.User):
@@ -57,8 +68,8 @@ class TestGameCog(lobby.LobbyCog):
             return f"{self.user.display_name} ({self.words})"
 
     class WordsLobby(lobby.Lobby):
-        def __init__(self, interaction, messageid, cog, private, game, minplayers, maxplayers):
-            super().__init__(interaction, messageid, cog, private,
+        def __init__(self, interaction, cog, private, game, minplayers, maxplayers):
+            super().__init__(interaction, cog, private,
                              lobbyView=MyButtons,
                              adminView=MyAdminView,
                              game=game,
@@ -128,7 +139,7 @@ class MyGame(lobby.Game):
         self.round += 1
         await self.channel.send(f"Next turn! {self.round}")
         timer = lobby.Timer(self, duration=timedelta(seconds=10), name=f"Auto Timer {self.round}")
-        await timer.start()
+        # await timer.start()
         await timer.render(self.channel)
         if await timer.wait():
             await self.channel.send(f"{timer.name} ended, proceeding to next turn.")

@@ -17,6 +17,9 @@ from utils.antimakkcen import antimakkcen
 #TODO good face bad face
 #TODO cheese thief https://www.youtube.com/watch?v=50V3M5VCsdI&t=1457s
 #TODO snakeoil https://youtu.be/m1KNVsG0EcQ?si=YkiiaOMqJpQkvTva
+#TODO no thanks game https://www.youtube.com/watch?v=TaFTKRjMY68
+
+#TODO add /rl
 
 
 start = time_module.perf_counter()  # measuring how long it takes to boot up the bot
@@ -67,16 +70,90 @@ async def on_ready():
     print(f"Signed in as {client.user.name} at {datetime.now()}")
     baselogger.info(f"{time_module.perf_counter() - start}s Bootup time")
 
-
 @client.event
-async def on_disconnect():  # happens sometimes, ensures on_ready will not display a million seconds
+async def on_disconnect():
     global start
     start = time_module.perf_counter()
 
 
+@client.listen("on_message")
+async def incoming_msg(msg: discord.Message):
+    if not msg.guild and msg.author.id != client.user.id:
+        tolog = f"{msg.author} sent DM: ['{msg.content}']{(' +' + ','.join([i.proxy_url for i in msg.attachments])) if msg.attachments else ''} "
+        tolog = emoji.demojize(antimakkcen(tolog)).encode('utf-8', "ignore").decode()
+        baselogger.warning(tolog, extra={"user": msg.author})
+
+@client.listen("on_guild_join")
+async def guildjoin(guild: discord.Guild):
+    tolog = f"[{guild.name}] joined ({len(guild.humans)} people)]"
+    tolog = emoji.demojize(antimakkcen(tolog)).encode('utf-8', "ignore").decode()
+    baselogger.highlight(tolog)
+
+
+@client.listen("on_guild_remove")
+async def guildleave(guild: discord.Guild):
+    tolog = f"Kicked from [{guild.name}] ({len(guild.humans)} people)]"
+    tolog = emoji.demojize(antimakkcen(tolog)).encode('utf-8', "ignore").decode()
+    baselogger.highlight(tolog)
+
+
+@client.listen("on_interaction")
+async def on_interaction_populate_cache(inter: discord.Interaction):
+    if not client.intents.members:
+        inter.client._connection._users.update({inter.user.id: inter.user._user})
+
+
+@client.listen("on_interaction")
+async def on_interaction(inter: discord.Interaction):
+    cmdobj = inter.application_command
+    if isinstance(cmdobj, discord.SlashApplicationSubcommand):
+        cmd = cmdobj.parent_cmd.name + "/" + cmdobj.name
+        opts = [f'{a["name"]} = {a["value"]}' for a in inter.data.get("options", [])[0]["options"]]
+    elif isinstance(cmdobj, discord.SlashApplicationCommand):
+        cmd = cmdobj.name
+        opts = [f'{a["name"]} = {a["value"]}' for a in inter.data.get("options", [])]
+    else:
+        if inter.type == discord.InteractionType.component:
+            buttonid = inter.data.get("custom_id", None)
+
+            if inter.data.get("component_type", None) == 2:
+                button: discord.ui.Button | None = discord.utils.find(lambda b: b.custom_id == buttonid, sum([v.children for v in client.all_views],[]))
+                button: str = f"{button.__class__}: [{button.label or button.emoji=}]" if button else None
+                tolog = f"[{inter.user}] used interaction [{button}] in: [{inter.guild}/{inter.channel}] on [{inter.message.created_at}]"
+
+            elif inter.data.get("component_type", None) == 3:
+                dd: discord.ui.Select | None = discord.utils.find(lambda v: v.custom_id == buttonid, [i for i in sum([v.children for v in client.all_views], [])])
+                dd: str = f"{dd.__class__}: {dd.placeholder=}" if dd else None
+                tolog = f"[{inter.user}] used interaction [{dd}, {inter.data.get('values')=}] in: [{inter.guild}/{inter.channel}] on [{inter.message.created_at}]"
+
+            else:
+                if inter.guild is None:
+                    tolog = f"[{inter.user}] used interaction [{inter.data}] in: [DM/{inter.user}] on [{inter.message.created_at}]"
+                else:
+                    tolog = f"[{inter.user}] used interaction [{inter.data}] in: [{inter.guild}/{inter.channel}] on [{inter.message.created_at}]"
+
+            tolog = emoji.demojize(antimakkcen(tolog)).encode('utf-8', "ignore").decode()
+            baselogger.event(tolog)
+        # baselogger.debug([i for i in dir(inter) if not i.startswith("_")])
+        ...  #probably buttons, and autocomplete too
+        return
+
+    # pipikLogger.debug(inter.data.get("options", []))
+    if inter.guild is None:
+        tolog = f"[{inter.user}] called [{cmd} with {opts}] in: [DM/{inter.user}]"
+    else:
+        tolog = f"[{inter.user}] called [{cmd} with {opts}] in: [{inter.guild}/{inter.channel}]"
+
+    tolog = emoji.demojize(antimakkcen(tolog)).encode('utf-8', "ignore").decode()
+    baselogger.event(tolog, extra={"channel": inter.channel, "user": inter.user, "command": cmdobj})
+
+
 @client.event
 async def on_application_command_error(inter: discord.Interaction, error: Exception):
-    errmsg = str(error).split(":", maxsplit=1)[1]
+    try:
+        errmsg = str(error).split(":", maxsplit=1)[1]
+    except IndexError:
+        errmsg = error
     try:
         await embedutil.error(inter, f"{errmsg}", delete=10)
         if "403" in errmsg and inter.guild is None:
@@ -95,27 +172,9 @@ async def on_application_command_error(inter: discord.Interaction, error: Except
             reason = "Interaction probably timed out after maximum of 15 minutes. Blame Discord."
             embed.add_field(name="Reason", value=reason)
         await inter.channel.send(embed=embed, delete_after=10)
-    inter.client.logger.error(f"Error in /{inter.application_command.name} called by {inter.user}: {errmsg}")
+    inter.client.logger.error(f"Error in /{inter.application_command.name} called by {inter.user}: {errmsg}", extra={"channel": inter.channel, "user": inter.user, "command": inter.application_command})
     if args.debug:
         raise error
-
-
-@client.listen("on_interaction")
-async def oninter(inter: discord.Interaction):
-    cmd = inter.application_command
-    if isinstance(cmd, discord.SlashApplicationSubcommand):
-        cmd = cmd.parent_cmd.name + "/" + cmd.name
-        opts = [f'{a["name"]} = {a["value"]}' for a in inter.data.get("options", [])[0]["options"]]
-    elif isinstance(cmd, discord.SlashApplicationCommand):
-        cmd = cmd.name
-        opts = [f'{a["name"]} = {a["value"]}' for a in inter.data.get("options", [])]
-    else:
-        ...  # probably buttons
-        return
-
-    tolog = f"[{inter.user}] called [{cmd} with {opts}]  in: [{inter.guild}/{inter.channel}]"
-    tolog = emoji.demojize(antimakkcen(tolog)).encode('utf-8', "ignore").decode()
-    baselogger.log(25, tolog)
 
 
 @client.slash_command(name="allgames", description="Lists all available games", guild_ids=(860527626100015154,))
@@ -210,14 +269,13 @@ else:
 allcogs = [cog for cog in os.listdir("./cogs") if cog.endswith("cog.py")] + ["testing.py"]
 cogcount = len(allcogs)
 cogs = []
-
 if not args.minimal:  # if not minimal
     if not [not cogs.append(cog) for cog in allcogs if args.__getattribute__(f"only_{cog.removesuffix('cog.py').removesuffix('.py')}")]: #load all the cogs that are marked to be included with only_*
         cogs = allcogs[:]  # if no cogs are marked to be exclusively included, load all of them
         for cog in reversed(cogs):  # remove the cogs that are marked to be excluded with no_*
             if args.__getattribute__(f"no_{cog.removesuffix('cog.py').removesuffix('.py')}"):  # if the cog is marked to be excluded
                 cogs.remove(cog)  # remove it from the list of cogs to be loaded
-cogs.remove("testing.py") if args.no_testing else None  # remove testing.py from the list of cogs to be loaded if testing is disabled
+# cogs.remove("testing.py") if args.no_testing else None  # remove testing.py from the list of cogs to be loaded if testing is disabled // no need to uncomment this line!
 
 for n, file in enumerate(cogs, start=1):  # its in two only because i wouldnt know how many cogs to load and so dont know how to format loading bar
     if not args.no_linecount:

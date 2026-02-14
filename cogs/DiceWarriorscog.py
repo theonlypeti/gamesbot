@@ -87,6 +87,7 @@ class DiceGame(lobby.Game):
         self.gamemsg = await self.gamemsg.edit(content=None, embed=embed, view=view)
         if await view.wait():
             player.statistics["Times AFK'd"] += 1
+            self.swap_players()
         else:  # an action was taken
             ...  # handled by the view's button callbacks #TODO check if afking changes player turn or put swap players below else
 
@@ -127,7 +128,7 @@ class DiceGame(lobby.Game):
 
         @discord.ui.button(label="Attack", style=discord.ButtonStyle.danger, disabled=True)
         async def attack(self, button, interaction: discord.Interaction):
-            if interaction.user.id == self.game.activeplayer.userid:
+            if interaction.user.id == self.game.activeplayer.user.id:
                 self.game.otherplayer.health -= self.dmg
                 self.game.otherplayer.statistics["Damage taken"] += self.dmg
                 self.game.activeplayer.statistics["Damage dealt"] += self.dmg
