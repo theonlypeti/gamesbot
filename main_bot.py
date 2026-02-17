@@ -1,8 +1,14 @@
+#linecount: utils\.
+# this line above is for the line counting function, it tells the bot to open the utils folder and count all lines in the .py files there, including subfolders, and add that to the total line count of the bot.
+# this works in any cog file. if a cog file uses external .py files, you can add a line like this with the path to that file to include it in the line count.
+# if you want to count only one file, end the path with the filename.py
+# if you want to count a whole folder, end the path with a backslash \ and it will count all .py files in that folder and its subfolders.
+# if you want to count only the files in a folder but not its subfolders, end the path with \. and it will only count the .py files directly in that folder.
 import sys
 from typing import Coroutine
 from utils.getMsgFromLink import getMsgFromLink
 from utils.lobbyutil.lobbycog import LobbyCog
-from utils.mentionCommand import mentionCommand
+from utils.mentionCommand import mentionCommand #for using in /run maybe
 import emoji
 import nextcord as discord
 from nextcord.ext import commands
@@ -24,7 +30,7 @@ from utils.antimakkcen import antimakkcen
 
 start = time_module.perf_counter()  # measuring how long it takes to boot up the bot
 
-VERSION = "1.1rc1"  # whatever you like lol, alpha 0.1, change it as you go on
+VERSION = "1.2rc1"  # whatever lol
 PROJECT_NAME = "GamesBot"  # NAME_YOUR_CHILD (note: this name will not show up as the bot name hehe)
 AUTHOR = "@theonlypeti"  # ADD_YOUR_NAME_BE_PROUD
 ADMIN_ID = 617840759466360842
@@ -53,18 +59,19 @@ root = os.getcwd()  # current working directory
 
 intents = discord.Intents.default()
 # intents.presences = True
-intents.members = True  # needed so the bot can see server members
-intents.message_content = True
+# intents.members = True  # needed so the bot can see server members
+# intents.message_content = True
 client = commands.Bot(intents=intents, chunk_guilds_at_startup=True, activity=discord.Game(name="Booting up..."), owner_id=ADMIN_ID)
 client.logger = baselogger
 client.root = root
+client.linecounted = []
 
 
 @client.event
 async def on_ready():
     game = discord.CustomActivity(
         name="Custom Status",
-        state=f"{linecount} lines of code; V{VERSION}!"
+        state=f"{client.linecount} lines of code; V{VERSION}!"
     )
     await client.change_presence(activity=game)
     print(f"Signed in as {client.user.name} at {datetime.now()}")
@@ -196,8 +203,7 @@ async def run(ctx: discord.Interaction, command: str):
         await ctx.send("oi oi oi we hackin or what?")
     elif command.startswith("print"):
         await embedutil.error(ctx, "This command evaluates any expression and sends the result.\nThe **print** function however **returns nothing**. \nYou might want to just input the desired string in quotes.", delete=30)
-    elif "redditapi" in command and ctx.user.id != ADMIN_ID:
-        await ctx.send("Lol no sorry not risking anyone else doing stuff with MY reddit account xDDD")
+
     else:
         await ctx.response.defer()
         a = eval(command)
@@ -218,9 +224,7 @@ async def arun(ctx: discord.Interaction, command: str, del_after: int=None):
             ("open(", "os.", "eval(", "exec("))) and ctx.user.id != ADMIN_ID:
         await ctx.send("oi oi oi we hackin or what?")
         return
-    elif "redditapi" in command and ctx.user.id != ADMIN_ID:
-        await ctx.send("Lol no sorry not risking anyone else doing stuff with MY reddit account xDDD")
-        return
+
     await ctx.response.defer()
     commands = command.split(";")
     for command in commands:
@@ -253,18 +257,50 @@ async def arun(ctx: discord.Interaction, command: str, del_after: int=None):
 
 os.chdir(root)
 
-files = os.listdir(root+r"/utils")
-if not args.no_linecount:  # if you don't want to open each file to read the linecount
+async def set_linecount_activity():
+    game = discord.CustomActivity(
+        name="Custom Status",
+        state=f"{linecount} lines of code; V{VERSION}!"
+    )
+    await client.change_presence(activity=game)
 
-    with open(__file__, "r") as file:  # open this file
-        linecount = len(file.readlines())
+def readlinecount(fpath):
+    with open(fpath, "r", encoding="UTF-8") as f:  # type: TextIOWrapper
+        firstline = f.readline()
+        lc = 1
+        if firstline.startswith("#linecount:") or firstline.startswith("# linecount:"):
+            toopen = firstline.split(":")[1].strip()
+            if toopen:
+                if toopen.endswith(".py"):
+                    toopen = os.path.join(root, toopen)
+                    # baselogger.debug(f"found file, Opening {toopen}")
+                    lc = readlinecount(toopen)  # recursion makes me scared
+                elif toopen.endswith("\\"):
+                    # baselogger.debug(f"found folder walk, Opening {toopen}")
+                    for lroot, dirs, files in os.walk(toopen):
+                        for file in files:
+                            if file.endswith(".py"):
+                                #baselogger.debug(f"found file, Opening {os.path.join(lroot, file)}")
+                                lc += readlinecount(os.path.join(lroot, file))
+                elif toopen.endswith("\\."):
+                    # baselogger.debug(f"found folder only, Opening {toopen}")
+                    for file in os.listdir(toopen):
+                        if file.endswith(".py"):
+                            # baselogger.debug(f"found file, Opening {os.path.join(toopen, file)}")
+                            lc += readlinecount(os.path.join(toopen, file))
+                else:
+                    baselogger.debug(f"malformed {fpath}")
+                    ...
+        lc += len(f.readlines())
+        # baselogger.debug(f"finished {fpath}, {lc}")
+        return lc
 
-    for file in files:
-        if file.endswith(".py"):
-            with open(os.path.join(root, "utils", file), "r", encoding="UTF-8") as f:
-                linecount += len(f.readlines())
-else:
-    linecount = "Unknown"
+
+if __name__ == "__main__":
+    os.chdir(root)
+    linecount = 0
+    if not args.no_linecount:
+        client.linecount = readlinecount(os.path.join(root, __file__))
 
 allcogs = [cog for cog in os.listdir("./cogs") if cog.endswith("cog.py")] + ["testing.py"]
 cogcount = len(allcogs)
@@ -277,14 +313,20 @@ if not args.minimal:  # if not minimal
                 cogs.remove(cog)  # remove it from the list of cogs to be loaded
 # cogs.remove("testing.py") if args.no_testing else None  # remove testing.py from the list of cogs to be loaded if testing is disabled // no need to uncomment this line!
 
-for n, file in enumerate(cogs, start=1):  # its in two only because i wouldnt know how many cogs to load and so dont know how to format loading bar
+client.coglist = cogs  # for use in reload command
+for n, file in enumerate(cogs, start=1): #it's in two only because i wouldn't know how many cogs to load and so dont know how to format loading bar
+    profstart = time_module.perf_counter()
     if not args.no_linecount:
-        with open("./cogs/"+file, "r", encoding="UTF-8") as f:
-            linecount += len(f.readlines())
+        fpath = os.path.join(root, "cogs", file)
+        if fpath not in client.linecounted:
+            client.linecounted += fpath
+            client.linecount += readlinecount(fpath)
+            # baselogger.debug(f"linecount: {client.linecount}")
     client.load_extension("cogs." + file[:-3])
     if not args.debug:
         sys.stdout.write(f"\rLoading... {(n / len(cogs)) * 100:.02f}% [{(int((n/len(cogs))*10)*'=')+'>':<10}]")
         sys.stdout.flush()
+
 sys.stdout.write(f"\r{len(cogs)}/{cogcount} cogs loaded.".ljust(50)+"\n")
 sys.stdout.flush()
 os.chdir(root)

@@ -12,9 +12,10 @@ from nextcord.ext import commands
 import json
 import emoji
 from collections import defaultdict
-from utils.Inventory import Inventory
+from utils.lobbyutil.Inventory import Inventory
 from utils.mentionCommand import mentionCommand
-from utils import embedutil, Colored
+from utils import embedutil
+from utils.lobbyutil import Colored
 
 root = os.getcwd()
 GAME_NAME = "Codenames"

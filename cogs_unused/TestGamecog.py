@@ -5,8 +5,9 @@ from datetime import timedelta
 from logging import Logger
 import emoji
 import nextcord as discord
-from utils.Inventory import Inventory
+from utils.lobbyutil.Inventory import Inventory
 import utils.lobbyutil.lobbycog as lobby
+from utils.lobbyutil.Timer import Timer
 from utils.lobbyutil.teamutil import MockPlayer
 
 TESTSERVER = 860527626100015154
@@ -61,11 +62,13 @@ class TestGameCog(lobby.LobbyCog):
     class WordsPlayer(lobby.Player):
 
         def __init__(self, user: discord.User):
+
+            self.money = 100
             super().__init__(user)
             self.words = []
 
         def __str__(self):
-            return f"{self.user.display_name} ({self.words})"
+            return f"{self.user.display_name} ({self.words}) (${self.money})"
 
     class WordsLobby(lobby.Lobby):
         def __init__(self, interaction, cog, private, game, minplayers, maxplayers):
@@ -90,6 +93,10 @@ class TestGameCog(lobby.LobbyCog):
 
         async def on_leave(self, player, reason):
             await player.user.send("You have left the game. Reason: " + reason)
+
+        async def on_ready(self, player, inter):
+            player.money += 50 #testing
+            self.cog.savePlayers(player)
 
         async def on_disband(self):
             print("aw")
@@ -138,7 +145,7 @@ class MyGame(lobby.Game):
     async def next_turn(self):
         self.round += 1
         await self.channel.send(f"Next turn! {self.round}")
-        timer = lobby.Timer(self, duration=timedelta(seconds=10), name=f"Auto Timer {self.round}")
+        timer = Timer(self, duration=timedelta(seconds=10), name=f"Auto Timer {self.round}")
         # await timer.start()
         await timer.render(self.channel)
         if await timer.wait():

@@ -1,10 +1,8 @@
 import string
 import nextcord as discord
 from nextcord.ext import commands
-from utils.Inventory import Inventory
-from functools import wraps
-from typing import Optional, Iterable, Callable
-from utils.Colored import Colored
+from utils.lobbyutil.Inventory import Inventory
+from utils.lobbyutil.Colored import Colored
 
 TESTSERVER = (860527626100015154,)
 

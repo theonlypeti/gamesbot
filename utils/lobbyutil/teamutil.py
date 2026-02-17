@@ -4,7 +4,7 @@ import emoji
 import nextcord as discord
 from nextcord import Object
 import utils.embedutil
-from utils import Colored
+from utils.lobbyutil import Colored
 from utils.lobbyutil.lobbycog import LobbyCog, Player, Lobby, Game, LobbyView, PlayerProt
 
 
@@ -143,6 +143,9 @@ class TeamPlayer(Player):
     """
     Notable new attributes:
     :ivar team: The team the player is in
+
+    :ivar team_emoji: The emoji corresponding to the player's team color, or a question mark if they are not in a team. For easier querying of team color without needing to check if team is None
+    :ivar team_name: The name of the player's team, or "No team" if they are not in a team. For easier querying of team name without needing to check if team is None
     """
     def __init__(self, discorduser):
         super().__init__(discorduser)
@@ -164,7 +167,15 @@ class TeamPlayer(Player):
             return False
 
     def __str__(self):
-        return f"{self.team.color.emoji_square if self.team else emoji.emojize(':question_mark:', language='alias')} {self.name} {'(no team)' if not self.team else ''}"
+        return f"{self.team_emoji} {self.name} {'(no team)' if not self.team else ''}"
+
+    @property
+    def team_emoji(self):
+        return self.team.color.emoji_square if self.team else emoji.emojize(':question_mark:', language='alias')
+
+    @property
+    def team_name(self):
+        return self.team.name if self.team else "No team"
 
 
 class MockPlayer(TeamPlayer):
@@ -179,14 +190,14 @@ class MockPlayer(TeamPlayer):
     def name(self):
         return self._name
 
-    def __eq__(self, other):
-        return other.userid == self.userid
-
     def tojson(self):
         self.cog.logger.warning("MockPlayer.toJson() accessed, returning empty json!")
         return "{}"
 
     @property
     def user(self):
-        self.cog.logger.warning("MockPlayer.user accessed, returning bot client's profile! (please don't DM haha)")
+        self.cog.logger.warning("MockPlayer.user accessed, returning bot client's profile so stuff doesn't crash! (please don't DM haha)")
         return self.cog.client.user
+
+    def __str__(self):
+        return f"{self.team_emoji} {self.name} (MockPlayer)"

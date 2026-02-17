@@ -18,6 +18,7 @@ from utils import embedutil
 
 root = os.getcwd()
 
+# INFO: this is the original implementation of sounds fishy without lobbycog being its separate thing. i kept it for comparsion.
 
 # guesser> each correctly found red herring = 1 point, wrong guess = 0 points
 # blue kip - 1 point for each fish wasnt flipped before them being guessed minel hamarabb kibasaztni magad
@@ -407,7 +408,7 @@ class FishyCog(commands.Cog):
         else:
             await embedutil.error(ctx, "You are not currently in a lobby.")
 
-    def getPlayer(self, dcUser: int | discord.Member | "FishyCog.ClovecePlayer"):
+    def getPlayer(self, dcUser: int | discord.Member):
         if isinstance(dcUser, int):
             lookingfor = dcUser
         elif isinstance(dcUser, discord.Member):

@@ -17,6 +17,8 @@ from utils.paginator import Paginator # Assuming this is needed elsewhere
 from utils import embedutil
 import utils.lobbyutil.lobbycog as lobby # Import the lobby framework
 
+#INFO: This is the implementation of sounds fishy, redone by AI. i was curious if it could handle the transition from the original code to my lobbycog framework thing by itself, without help. this is its attempt.
+
 # Assuming root is defined elsewhere or handled by the framework
 # root = os.getcwd()
 

@@ -1,3 +1,4 @@
+#linecount: utils\lobbyutil\
 import random
 from datetime import timedelta, datetime
 from tabulate import tabulate
@@ -5,16 +6,16 @@ import utils.embedutil
 import nextcord as discord
 import json
 import emoji
-from utils.Inventory import Inventory
+from utils.lobbyutil.Inventory import Inventory
 from utils.lobbyutil.lobbycog import LobbyCog, HelpCategory, Game, AdminView
 from utils.lobbyutil.teamutil import TeamLobby, TeamPlayer, Team, MockPlayer
-from utils import Colored
+from utils.lobbyutil import Colored
 
 
 class CodenamesCog(LobbyCog):
     def __init__(self, client: discord.Client):
 
-        super().__init__(client, "Codenames", minplayers=4, gameclass=CodenamesGame, playerclass=CodenamesPlayer, lobbyclass=CodenamesLobby)
+        super().__init__(client, "Codenames", minplayers=4, gameclass=CodenamesGame, playerclass=TeamPlayer, lobbyclass=CodenamesLobby)
         self.client = client
         self.teams = sorted([Team(col) for col in Colored.Colored.list().values()], key=lambda t: t.color.emoji_square)
 
@@ -99,7 +100,7 @@ If you wish to be the spymaster, repick your own team to be placed at the end.""
 
         super().__init__(interaction, cog, private, adminView=CodenamesMngmntView, game=game, minplayers=minplayers, maxplayers=maxplayers)
 
-        self.players: list[CodenamesPlayer] = self.players  # this is just to override the typehint of the attr
+        self.players: list[TeamPlayer] = self.players  # this is just to override the typehint of the attr
 
         with open(self.cog.client.root + r"/data/codenamesWords.json", "r", encoding="UTF-8") as json_file:
             self.words = json.load(json_file)
@@ -142,23 +143,6 @@ If you wish to be the spymaster, repick your own team to be placed at the end.""
                 and len(teams) >= 2):  # enough teams
             return True
         return False
-
-
-class CodenamesPlayer(TeamPlayer):
-    def __init__(self, discorduser: discord.Member):
-        super().__init__(discorduser)
-
-    def __eq__(self, other):
-        # logger.debug(other.__class__)
-        # logger.debug(other.__class__ == MockPlayer("a").__class__)
-        # logger.debug(isinstance(other, MockPlayer))
-        # logger.debug(MockPlayer("a").__class__)
-        if isinstance(other, self.__class__):
-            return self.userid == other.userid
-        elif isinstance(other, MockPlayer):
-            return self.userid == other.userid
-        else:
-            raise NotImplementedError(f"Comparison between {self.__class__} and {other.__class__}")
 
 
 class Word:
@@ -220,7 +204,7 @@ class CodenamesGame(Game):
         string = tabulate([self.words[i:i + 5] for i in range(0, len(self.words), 5)], tablefmt=("grid" if self.lobby.mobile else "fancy_grid"))
         return f"```ansi\n{string}\n```"
 
-    async def send_table(self, chann: discord.TextChannel = None, guesser: CodenamesPlayer = None):
+    async def send_table(self, chann: discord.TextChannel = None, guesser: TeamPlayer = None):
         if guesser:
             viewObj = discord.ui.View(timeout=300)
             viewObj.add_item(self.WordPicker(self, guesser))
@@ -241,7 +225,7 @@ class CodenamesGame(Game):
                 self.logger.debug(f"{guesser.name} didn't guess in time")
             else:
                 self.logger.debug(f"{guesser.name} did guess in time")
-            self.lobby.cog.savePlayers()
+            self.savePlayers()
 
     class ReturnToLobby(discord.ui.View):
         def __init__(self, game: "CodenamesGame", msg: discord.Message = None):
@@ -268,7 +252,7 @@ class CodenamesGame(Game):
             await self.msg.edit(view=None)
 
     class WordPicker(discord.ui.StringSelect):
-        def __init__(self, game: "CodenamesGame", guesser: CodenamesPlayer):
+        def __init__(self, game: "CodenamesGame", guesser: TeamPlayer):
             super().__init__(min_values=1, max_values=25)
             self.logger = game.lobby.cog.client.logger
             self.game = game
@@ -347,7 +331,7 @@ class CodenamesGame(Game):
                                                color=winner.color.dccolor),
                                  view=viewObj)
 
-    async def round(self, channel: discord.TextChannel, guesser: CodenamesPlayer):
+    async def round(self, channel: discord.TextChannel, guesser: TeamPlayer):
         self.channel = channel
 
         await self.send_table(channel, guesser)

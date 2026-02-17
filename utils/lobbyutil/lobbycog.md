@@ -447,6 +447,8 @@ Players love keeping track of statistics so i encourage saving interesting or wa
 
 `savePlayers()` saves any changes to the players' statistics and other important attributes. You can change the `self._important` attribute in your subclassed `Player` class to include more attributes, or define these attributes before calling `super().__init__()` in the player's `__init__` method, as explained in the Player class section.
 
+The game class's `savePlayers()` is different from the cog's method in a way. The game class's `savePlayers()` automatically saves the players of the current game, while the cog's `savePlayers(users_to_save: list)` needs a list of Player objects as argument. You would mostly use the game's savePlayers method, but if you want to create some custom lobby functions, just be aware of that.
+
 
 To get a Player object from a user id or `interaction.user` you can use `self.getPlayer(userid/userobj)`. 
 
@@ -514,7 +516,8 @@ Adding new help categories is done by creating an instance of the `HelpCategory`
 self.add_help_category(HelpCategory(label="House Rules",
                                     description="This category is about house rules",
                                     emoji="🎲",
-                                    helptext="There are no rules, the host always wins."))
+                                    helptext="There are no rules, the host always wins.",
+                                    image="https://image-explaing-my-house.rules"))
 ```
 
 When you want to mention a command in a help category, it could happen that `command.get_mention()` will throw an error regarding the command not being registered. 
@@ -527,7 +530,7 @@ The `Timer` class provides a lightweight, asyncio-based countdown timer used thr
 
 ## Purpose
 
-Use `Timer` to implement turn timers, countdowns, or other timed events inside your game's `Game` instance. It integrates with the lobby/game model and provides small interactive views (Start/Stop buttons) as well as programmatic control.
+Use `Timer` to implement turn timers, countdowns, or other timed events inside your game. It integrates with the lobby/game model and provides small interactive views (Start/Stop buttons) as well as programmatic control.
 
 ## Key behaviours
 
@@ -539,6 +542,7 @@ Use `Timer` to implement turn timers, countdowns, or other timed events inside y
 ## Constructor
 
 ```py
+from utils.lobbyutil.Timer import Timer
 Timer(game: Game, duration: timedelta, name: str = None, stoppable: bool = True)
 ```
 

@@ -1,3 +1,4 @@
+#linecount: \utils\lobbyutil\
 from __future__ import annotations
 from copy import deepcopy
 import nextcord as discord
@@ -189,7 +190,6 @@ class FishyCog(lobby.LobbyCog):
                          gameclass=FishyGame,
                          minplayers=3)
 
-        self.logger.debug("Fishy cog loaded")
 
         from data import fishyquestions
         self.questions = fishyquestions.questions

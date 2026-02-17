@@ -1,6 +1,7 @@
+#linecount: \utils\lobbyutil\
 from __future__ import annotations
 import os
-from utils.Inventory import Inventory
+from utils.lobbyutil.Inventory import Inventory
 import nextcord as discord
 import emoji
 from random import choice

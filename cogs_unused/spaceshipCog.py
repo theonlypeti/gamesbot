@@ -1,6 +1,8 @@
 import nextcord as discord
 from nextcord.ext import commands
 
+# lol abandoned project
+
 amounts = {
   0: "Absent",
   10: "Negligible",

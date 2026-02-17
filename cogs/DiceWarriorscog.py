@@ -1,3 +1,4 @@
+#linecount: \utils\lobbyutil\
 from __future__ import annotations
 from random import randint
 from utils.embedutil import error
@@ -19,9 +20,6 @@ class DiceCog(lobby.LobbyCog):
                          playerclass=DicePlayer)
                          # TESTSERVER_ID=TESTSERVER)
 
-        self.logger = client.logger.getChild(f"{self.__module__}")
-        self.logger.debug("DiceWarriors cog loaded")
-
         self.rules = """
         Each players takes turn attacking the other player. 
         Roll the dice to accumulate damage. You may stop anytime and deal the accumulated damage to the other player. 
@@ -36,6 +34,9 @@ class DiceCog(lobby.LobbyCog):
                                                  helptext="This category seems to be working"))
 
         self.add_subcommand("leaderboard", self.leaderboard)
+
+        self.logger = client.logger.getChild(f"{self.__module__}")
+        self.logger.debug("DiceWarriors cog loaded")
 
     async def leaderboard(self, interaction: discord.Interaction):
         """Displays the best player (not really)"""

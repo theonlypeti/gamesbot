@@ -18,7 +18,7 @@ class MyLogger(logging.Logger):
 
     def _anyLog(self, level, message, *args, **kwargs):
         if self.isEnabledFor(level):
-            self._log(level, message, args, **kwargs)
+            self._log(level, message, args, stacklevel=2, **kwargs)
 
     def __call__(self, message, *args, **kwargs):
         if self.isEnabledFor(logging.INFO):
