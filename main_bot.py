@@ -61,7 +61,7 @@ intents = discord.Intents.default()
 # intents.presences = True
 # intents.members = True  # needed so the bot can see server members
 # intents.message_content = True
-client = commands.Bot(intents=intents, chunk_guilds_at_startup=True, activity=discord.Game(name="Booting up..."), owner_id=ADMIN_ID)
+client = commands.Bot(intents=intents, chunk_guilds_at_startup=False, activity=discord.Game(name="Booting up..."), owner_id=ADMIN_ID)
 client.logger = baselogger
 client.root = root
 client.linecounted = []
