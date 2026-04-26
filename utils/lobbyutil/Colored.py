@@ -1,7 +1,5 @@
 from typing import List
-
 import nextcord as discord
-
 
 class ColorGroup:
     def __init__(self, dccolor: discord.Colour, name: str = None, cmdcolor: str = None,
@@ -32,9 +30,9 @@ class Colored:
     yellow = ColorGroup(discord.Colour.gold(), "Yellow", "\033[33m", "🟨", "🟡", "💛")
     orange = ColorGroup(discord.Colour.orange(), "Orange", "\033[41m\033[37m", "🟧", "🟠", "🧡")
     purple = ColorGroup(discord.Colour.purple(), "Purple", "\033[35m", "🟪", "🟣", "💜")
-    # pink = Color(discord.Colour.magenta(), "Pink", "pink", "??", "", "🩷") #these few only have heart emojis, and the ansii colors are not distinct enough
-    # aqua = Color(discord.Colour.blue(), "Aqua", "\033[36m", "??", "", "🩵")
-    # grey = Color(discord.Colour.light_grey(), "Grey", "grey", "??", "", "🩶")
+    # pink = ColorGroup(discord.Colour.magenta(), "Pink", "\033[45;35m", "🌸", "🌸", "🩷")
+    # aqua = ColorGroup(discord.Colour.blue(), "Aqua", "\033[36m", "💠", "❄️", "🩵") #these few only have heart emojis, and the ansi colors are not distinct enough
+    # grey = ColorGroup(discord.Colour.light_grey(), "Grey", "\033[42;37m", "💾", "⚙️", "🩶")
     white = ColorGroup(discord.Colour.from_rgb(240, 240, 240), "White", "\033[37m", "⬜", "⚪", "🤍")
     black = ColorGroup(discord.Colour.from_rgb(20, 20, 20), "Black", "\033[30m", "⬛", "⚫", "🖤")
     brown = ColorGroup(discord.Colour.dark_gold(), "Brown", "\033[41m\033[30m", "🟫", "🟤", "🤎")

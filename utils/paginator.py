@@ -1,5 +1,6 @@
+import itertools
 from math import ceil
-from typing import Callable, MutableSequence
+from typing import Callable, MutableSequence, Iterator
 import emoji
 import nextcord as discord
 import nextcord.errors
@@ -22,7 +23,7 @@ class Paginator(discord.ui.View):
     :param kwargs: See above.
 
     Add a back button manually with View.add_item, appropriate to the situation you are in."""
-    def __init__(self, func: Callable[..., discord.Embed] | None, select: Callable[..., discord.ui.Select] | None, inv: MutableSequence, itemsOnPage: int = 25, timeout: int|None = None, kwargs=None):
+    def __init__(self, func: Callable[..., discord.Embed] | None, select: Callable[..., discord.ui.Select] | None, inv: MutableSequence|MutableSequence[MutableSequence], itemsOnPage: int = 25, timeout: int|None = None, kwargs=None):
         self.mykwargs = kwargs or set()
         self.page: int = 0
         self.maxpages: int = 0  # to be rewritten on update
@@ -32,8 +33,9 @@ class Paginator(discord.ui.View):
             self.select.custom_id = "pagiselect"
         self.itemsOnPage: int = itemsOnPage
         assert self.itemsOnPage
-        self.inv: MutableSequence = inv
+        self.inv: MutableSequence = Pool(inv)
         self.msg: discord.Message | None = None
+        self.err: str = ""
         super().__init__(timeout=timeout)
         self.update()
         # if self.select:
@@ -111,18 +113,90 @@ class Paginator(discord.ui.View):
             msg: discord.Interaction = interaction  # for clarity
             try:
                 if self.func:
-                    self.msg = await msg.edit(embed=self.func(self), view=self, **kwargs)
+                    self.msg = await msg.edit(content=self.err,embed=self.func(self), view=self, **kwargs)
                 else:
-                    self.msg = await msg.edit(view=self, **kwargs)
+                    self.msg = await msg.edit(content=self.err, view=self, **kwargs)
             except (discord.errors.InvalidArgument, TypeError, nextcord.errors.NotFound): pass
             else: return
 
         # else:  # if it's an interaction or a text channel, ergo it is sent for the first time
         if self.func:
-            self.msg = await interaction.send(embed=self.func(self), view=self, **kwargs)
+            self.msg = await interaction.send(content=self.err, embed=self.func(self), view=self, **kwargs)
         else:
-            self.msg = await interaction.send(view=self, **kwargs)
+            self.msg = await interaction.send(content=self.err, view=self, **kwargs)
 
+class Pool(MutableSequence): #TODO document this
+    def __init__(self, lists):
+        if isinstance(lists, list):
+            if lists and isinstance(lists[0], list):
+                self.lists: MutableSequence[MutableSequence] = lists
+            else:
+                self.lists: MutableSequence[MutableSequence] = [lists]
+        else:
+            TypeError("Inventory Pool must be initialized with a list or a list of lists.")
+
+    def __len__(self) -> int:
+        return sum((len(i) for i in self.lists))
+
+    def __iter__(self) -> Iterator:
+        return itertools.chain.from_iterable(self.lists)
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[i] for i in range(*index.indices(len(self)))]
+
+        # Adjust for negative indexing (e.g., pool[-1])
+        if index < 0:
+            index += len(self)
+
+        for src in self.lists:
+            if index < len(src):
+                return src[index]
+            index -= len(src)
+        raise IndexError("Out of bounds")
+
+    def __setitem__(self, index, value):
+        if index < 0:
+            index += len(self)
+
+        for src in self.lists:
+            if index < len(src):
+                src[index] = value
+                return
+            index -= len(src)
+        raise IndexError("Pool assignment index out of range")
+
+    def insert(self, index, value):
+        # Standard Python behavior: if index is too high, append to the end
+        if index >= len(self):
+            self.lists[-1].append(value)
+            return
+
+        if index < 0:
+            index += len(self)
+
+        for src in self.lists:
+            if index <= len(src):  # <= because we can insert at the very end of a sub-list
+                src.insert(index, value)
+                return
+            index -= len(src)
+
+    def __delitem__(self, index):
+        if index < 0:
+            index += len(self)  # Normalize -1 to (total_len - 1)
+
+        for src in self.lists:
+            if index < len(src):
+                del src[index]
+                return
+            index -= len(src)
+        raise IndexError("Out of bounds")
+
+    def __contains__(self, item) -> bool:
+        return any(item in src for src in self.lists)
+
+    def __repr__(self):
+        return str([item for src in self.lists for item in src])
 
 # Example usage:
 # @discord.slash_command()

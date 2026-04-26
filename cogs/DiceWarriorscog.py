@@ -35,7 +35,6 @@ class DiceCog(lobby.LobbyCog):
 
         self.add_subcommand("leaderboard", self.leaderboard)
 
-        self.logger = client.logger.getChild(f"{self.__module__}")
         self.logger.debug("DiceWarriors cog loaded")
 
     async def leaderboard(self, interaction: discord.Interaction):
@@ -90,7 +89,7 @@ class DiceGame(lobby.Game):
             player.statistics["Times AFK'd"] += 1
             self.swap_players()
         else:  # an action was taken
-            ...  # handled by the view's button callbacks #TODO check if afking changes player turn or put swap players below else
+            ...  # handled by the view's button callbacks
 
     def show_embed(self, p: DicePlayer):
         embed = discord.Embed(title=f"{p.user.name} it's your turn to roll the dice", color=p.user.color)

@@ -7,11 +7,11 @@ from abc import ABC, abstractmethod
 from datetime import datetime, date
 from functools import partial
 from textwrap import TextWrapper
-from typing import Optional, Callable, Coroutine, Literal, Protocol, TypeVar, Generic, Type
+from typing import Optional, Callable, Coroutine, Literal, Protocol, TypeVar, Generic, Type, Any, Iterable
 import nextcord as discord
 from nextcord.ext import commands
 import json
-import emoji #TODO remove this dependency?
+import emoji #TODO lose this dependency?
 from collections import defaultdict
 from utils.antimakkcen import antimakkcen
 from utils import embedutil
@@ -19,16 +19,15 @@ import sqlite3
 
 root = os.getcwd()
 PlayerT = TypeVar("PlayerT", bound="Player")
-# friendly alias for IDE/readability: annotate a parameter that expects a class producing PlayerT
 PlayerClass = Type[PlayerT]
+# friendly alias for IDE/readability: annotate a parameter that expects a class producing PlayerT
 
 # TODO localisations? and allow to customize error messages and other text? these go hand in hand
-# TODO on_message_delete if it was a lobby message, remove the lobby, or game message disband it etc
 # TODO document the lobbyview more in the markdown # what more is there?
 # TODO document the Inventory usage more in the markdown, how you should include readycheck in the inventory
 # TODO document MockPlayer
-# TODO try metaclassing? for better slash command and subcommand adding
-# TODO daily command template? theres so much that goes into it. leaderboard too? thats also very custom.
+# try metaclassing? for better subcommand adding? low prio
+# daily command template? there's so much that goes into it. leaderboard too? that's also very custom.
 # consider moving the start game button to admin view as only they can start anyway
 # consider redoing the playercount display and player lister in the lobby embed, as it can be unclear what is minimum and maximum players
 
@@ -56,8 +55,7 @@ class LobbyCog(commands.Cog):
             self.logger.warning(f"{self.__module__}: No bot.logger found, using root logger. Consider creating a logger using utils.mylogger.py and passing it into the bot/client as bot.logger = yourlogger")
 
         self.GAME_NAME = GAME_NAME
-        self.BASE_CMD_NAME = BASE_CMD_NAME or antimakkcen(GAME_NAME.lower().replace(" ", "")).translate(str.maketrans("", "", string.punctuation))
-        BASE_CMD_NAME = self.BASE_CMD_NAME
+        self.BASE_CMD_NAME = BASE_CMD_NAME or antimakkcen(GAME_NAME.lower().replace(" ", "")).translate(str.maketrans("", "", string.punctuation))[:32]
 
         self.playerclass: PlayerClass = playerclass or Player
         self.lobbyclass = lobbyclass or Lobby
@@ -67,28 +65,27 @@ class LobbyCog(commands.Cog):
         self.TESTSERVER_ID = TESTSERVER_ID
         self.TESTSERVER = discord.Object(self.TESTSERVER_ID) if self.TESTSERVER_ID else None
 
-        self.users: dict[int, PlayerClass] = {} # this might be problematic, if i dont flush this and eventually fills up with millions of players? ahaha thats ambitious lol. imagnie. but hey, be proactive.
+        self.users: dict[int, PlayerClass] = {} # this might be problematic, if i don't flush this and eventually fills up with millions of players? ahaha that's ambitious lol. imagine. but hey, be proactive.
         self.lobbies: dict[str, Lobby] = {}
 
         os.makedirs(r"./data", exist_ok=True)
-        self.basecmd = discord.SlashApplicationCommand(description=f"Commands for {self.GAME_NAME} game.", name=BASE_CMD_NAME, guild_ids=(self.TESTSERVER_ID,), force_global=not self.TESTSERVER_ID, callback=self.basegamecmd)
-        self.helpcmd = discord.SlashApplicationSubcommand(description=f"Shows the help manual to the {self.GAME_NAME} game.", name="help", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.showhelp)
-        self.statscmd = discord.SlashApplicationSubcommand(description=f"Shows your stats across all the {self.GAME_NAME} games you´ve played.", name="stats", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.showstats)
-        self.joincmd = discord.SlashApplicationSubcommand(description=f"Join an existing {self.GAME_NAME} lobby.", name="join", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.joinlobby)
-        self.leavecmd = discord.SlashApplicationSubcommand(description="Leave the lobby you are currently in.", name="leave", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.leavelobby)
-        self.startcmd = discord.SlashApplicationSubcommand(description=f"Creates a {self.GAME_NAME} lobby for users to join and to start the game.", name="start", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.makeLobby)
+        self.basecmd = discord.SlashApplicationCommand(description=f"Commands for {self.GAME_NAME} game"[:100], name=self.BASE_CMD_NAME, guild_ids=(self.TESTSERVER_ID,), force_global=not self.TESTSERVER_ID, callback=self.basegamecmd)
+        self.helpcmd = discord.SlashApplicationSubcommand(description=f"Shows the help manual to the {self.GAME_NAME} game."[:100], name="help", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.showhelp)
+        self.statscmd = discord.SlashApplicationSubcommand(description=f"Shows your stats across all the {self.GAME_NAME} games you've played"[:100], name="stats", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.showstats)
+        self.joincmd = discord.SlashApplicationSubcommand(description=f"Join an existing {self.GAME_NAME} lobby"[:100], name="join", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.joinlobby)
+        self.leavecmd = discord.SlashApplicationSubcommand(description=f"Leave the {self.GAME_NAME} lobby you are currently in"[:100], name="leave", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.leavelobby)
+        self.startcmd = discord.SlashApplicationSubcommand(description=f"Creates a {self.GAME_NAME} lobby for players to join and start the game"[:100], name="start", parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command, callback=self.makeLobby)
 
         for child in [self.helpcmd, self.statscmd, self.joincmd, self.leavecmd, self.startcmd]:
             self.basecmd.children[child.name] = child
 
         self.application_commands.append(self.basecmd)
-        self.other_commands = {}
         self.process_app_cmds()
 
         self.help_categories = {}
 
         categories = [
-            HelpCategory("Commands", "Gives help about the game commands.", emoji.emojize(":paperclip:"), None), #some IDEs might struggle rendering actual emoji objects
+            HelpCategory("Commands", "Gives help about the game commands.", emoji.emojize(":paperclip:"), None), #some IDEs might struggle rendering actual emoji unicode characters, using emojize
             HelpCategory("Rules", "Explains the rules of this game.", emoji.emojize(":ledger:"), "Rules"),
             HelpCategory("Credits", "Links and about.", emoji.emojize(":globe_with_meridians:"), "Credits")
         ]
@@ -99,7 +96,13 @@ class LobbyCog(commands.Cog):
         if not client.intents.members:
             inter.client._connection._users.update({inter.user.id: inter.user._user})
 
-    def add_subcommand(self, name: str, callback: Callable[[discord.Interaction], Coroutine[..., ..., None]], description: str = None) -> discord.SlashApplicationSubcommand:
+    @commands.Cog.listener()
+    async def on_message_delete(self, msg: discord.Message):
+        lobby = discord.utils.find(lambda l: msg == l.messageid, self.lobbies.values())  # if the deleted message is a lobby management message, delete the lobby
+        if lobby:
+            await lobby.disband()
+
+    def add_subcommand(self, name: str, callback: Callable[[discord.Interaction], Coroutine[Any, Any, None]], description: str = None) -> discord.SlashApplicationSubcommand:
         """Adds a subcommand to the base command of the game. The callback function's docstring will appear in the help command's description."""
         cmd = discord.SlashApplicationSubcommand(name=name, description=description,
                                                  parent_cmd=self.basecmd, cmd_type=discord.ApplicationCommandOptionType.sub_command,
@@ -124,12 +127,16 @@ class LobbyCog(commands.Cog):
     def rules(self, value):
         self.help_categories["Rules"].helptext = value
 
-    @property
     def commands_helptext(self):
-        cmd_sign = (client.get_application_command_from_signature(self.BASE_CMD_NAME, type=discord.ApplicationCommandType.chat_input, guild=self.TESTSERVER_ID))
-        cmds: dict[str, discord.SlashApplicationSubcommand] = cmd_sign.children
-        cmds.update(self.other_commands)
-        return "\n\n".join([f"{v.get_mention(self.TESTSERVER)} = {v.callback.__doc__}" for k, v in cmds.items()])
+        cmds: dict[str, discord.SlashApplicationSubcommand | discord.SlashApplicationCommand] = {}
+        for c in sorted(self.application_commands, key=lambda c: c.name == self.BASE_CMD_NAME, reverse=True):  # base command first, then the rest
+            if isinstance(c, discord.SlashApplicationCommand):
+                cmd_sign = (client.get_application_command_from_signature(c.name, type=discord.ApplicationCommandType.chat_input, guild=self.TESTSERVER_ID))
+                if cmd_sign.children:
+                    cmds.update(cmd_sign.children)
+                else:
+                    cmds.update({c.name: c})
+        return "\n\n".join([f"{v.get_mention(self.TESTSERVER)} = {v.callback.__doc__ or 'Missing docstring'}" for k, v in cmds.items()])
 
     def readUsers(self, lookingfor: int):
         """Im not sure how to separate attrs in sql when they can be added dynamically anytime by the developer when prototyping,
@@ -183,9 +190,6 @@ class LobbyCog(commands.Cog):
             lookingfor = int(dc_user)
         elif isinstance(dc_user, (discord.Member, discord.User)):
             lookingfor = dc_user.id
-        elif isinstance(dc_user, MockPlayer):  # just keep it
-            lookingfor = dc_user.userid
-            self.users.update({dc_user.userid: dc_user})
         else:
             raise NotImplementedError(type(dc_user))
         if lookingfor in self.users:  # idk how to do this with defaultdict
@@ -198,7 +202,7 @@ class LobbyCog(commands.Cog):
                 if isinstance(dc_user, (discord.Member, discord.User)):
                     lookingfor = dc_user
                 else:
-                    lookingfor = client.get_user(int(lookingfor)) #please dont supply strings, lets get this User from discord cache
+                    lookingfor = client.get_user(int(lookingfor)) #please don't supply strings, lets get this User from discord cache
                 if lookingfor:
                     user = self.playerclass(lookingfor)
                     self.users.update({user.userid: user})
@@ -207,7 +211,7 @@ class LobbyCog(commands.Cog):
                 else:
                     raise ValueError(f"User {lookingfor} not found in discord bot cache")
 
-    def savePlayers(self, users_to_save: list[Player]|Player):
+    def savePlayers(self, users_to_save: Iterable[Player]|Player):
         """Provide a player or list of players to save to db. Calling the game's savePlayers() method automatically populates this list with the current lobby's players.
 
         If you have some other own database you want to save to, you can just override this method with your own implementation.
@@ -236,7 +240,7 @@ class LobbyCog(commands.Cog):
 
     # @basegamecmd.subcommand(name="stats", description="Shows your stats across all the games you´ve played.")
     async def showstats(self, interaction: discord.Interaction,
-                        user: discord.Member = discord.SlashOption(name="user", description="See someone else´s profile.", required=False, default=None)):
+                        user: discord.Member = discord.SlashOption(name="user", description="See someone else's profile.", required=False, default=None)):
         """Shows your or someone else's statistics across all games."""  # this will be the helptext for /help
         if user is None:
             user = interaction.user
@@ -291,18 +295,19 @@ class LobbyCog(commands.Cog):
                         else:
                             await interaction.edit(embed=embed, attachments=[])
 
+        assert len(self.help_categories) <= 24, f"Too many help categories. {len(self.help_categories)} present out of 24 maximum."
         embedVar = discord.Embed(title="What do you wish to learn about?", description="Pick a topic below:")  #add page indicator to the title if mult pages, but i hope there wont be that many xd
         embedutil.setuser(embedVar, interaction.user)
         viewObj = discord.ui.View(timeout=3600)
 
         categories = self.help_categories
         if categories["Commands"].helptext is None:
-            categories["Commands"].helptext = self.commands_helptext
+            categories["Commands"].helptext = self.commands_helptext()
 
         if categories["Rules"].helptext == "Rules":
-            self.logger.warning("No rules defined for this game. Do so with yourcog.rules = \"Your rules\"")
+            self.logger.warning(f"No rules defined for this game. Do so with {self.__class__.__name__}.rules = \"Your rules\"")
         if categories["Credits"].helptext == "Credits":
-            self.logger.warning("No credits defined for this game. Do so with yourcog.credits = \"Your credits\"")
+            self.logger.warning(f"No credits defined for this game. Do so with {self.__class__.__name__}.credits = \"Your credits\"")
 
         viewObj.add_item(HelpTopicSelector(categories, self.logger))
         await interaction.send(embed=embedVar, view=viewObj)
@@ -310,13 +315,18 @@ class LobbyCog(commands.Cog):
     # @basegamecmd.subcommand(name="join", description="Join an existing lobby.")
     async def joinlobby(self, interaction: discord.Interaction, lobbyid: str = discord.SlashOption(name="lobbyid",
                                                                                                    description="A lobby´s identification e.g. ABCD",
-                                                                                                   required=True)):
+                                                                                                   required=True,
+                                                                                                   min_length=4, max_length=4)):
         """Use this command to enter a lobby using its unique lobby code identifier."""
         # this will be the helptext for /help
         user = self.getPlayer(interaction.user)
         lobby = self.getLobby(lobbyid.upper())
         if lobby:
-            await lobby.addPlayer(interaction, user)
+            can_join, reason = user.can_join(lobby)
+            if can_join:
+                await lobby.addPlayer(interaction, user)
+            else:
+                await embedutil.error(interaction, f"You cannot join this lobby. {reason}", ephemeral=True, delete=10)
         else:
             await embedutil.error(interaction, f"Lobby {lobbyid.upper()} not found.")
 
@@ -378,9 +388,10 @@ class LobbyCog(commands.Cog):
             await newLobby.addPlayer(interaction, user)
 
     class KickPlayerDropdown(discord.ui.Select):
-        def __init__(self, lobby: Lobby, cog: LobbyCog):
+        def __init__(self, lobby: Lobby):
             self.lobby = lobby
-            self.cog = cog
+            self.cog = lobby.cog
+            self.logger = lobby.cog.logger
             # self.players = self.lobby.players[1:]  # first player later doesn't have to be the lobbyleader
             self.players = [player for player in self.lobby.players if player.userid != self.lobby.lobbyleader.id]
             optionslist = [discord.SelectOption(label=i.name, value=f"{i.userid}") for i in self.players]
@@ -390,15 +401,20 @@ class LobbyCog(commands.Cog):
         async def callback(self, inter):
             result = self.values[0]
             if result != "-1":
-                self.cog.logger.debug(f"kicking player number {result}")
+                self.logger.debug(f"kicking player number {result}")
                 tokick = self.cog.getPlayer(int(self.values[0]))
                 await self.lobby.removePlayer(inter, tokick)
                 await self.lobby.messageid.edit(embed=self.lobby.show())
                 try:
                     await self.lobby.on_leave(tokick, "kicked")
                 except Exception as e:
-                    self.logger.error(f"Error in on_leave player {tokick.userid}.  Probably doesn't have permissions to DM. Real error: {e}")
+                    self.logger.error(f"Error in on_leave player {tokick.userid}. Probably doesn't have permissions to DM. Real error: {e}")
             await inter.edit(view=self.lobby.adminView(self.lobby))
+
+    # @commands.Cog.listener("on_disconnect") # i need to find a way to make this work. it deletes either the manage or the lobbymsg but not both and throws a gigantic error saying client disconnected or smth
+    # async def teardown(self, *args, **kwargs):
+    #     for l in self.lobbies.values():
+    #         await l.disband()
 
 
 class AdminView(discord.ui.View):
@@ -410,11 +426,12 @@ class AdminView(discord.ui.View):
     @discord.ui.button(label="Kick Player", style=discord.ButtonStyle.red, emoji=emoji.emojize(":boot:", language="alias"))
     async def kickbutton(self, button, inter):
         viewObj = discord.ui.View()
-        viewObj.add_item(self.cog.KickPlayerDropdown(self.lobby, self.cog))
+        viewObj.add_item(self.cog.KickPlayerDropdown(self.lobby))
         await inter.edit(view=viewObj)
 
     @discord.ui.button(label="Resend lobby message", style=discord.ButtonStyle.grey, emoji=emoji.emojize(":right_arrow_curving_left:"))
     async def resendbutton(self, button, inter):
+        await inter.response.defer()
         if inter.user.id == self.lobby.lobbyleader.id:
             await self.lobby.send_lobby(inter)
         else:
@@ -434,20 +451,24 @@ class LobbyView(discord.ui.View):
 
     def __init__(self, lobby: Lobby, *args, **kwargs):
         self.cog: LobbyCog = lobby.cog
+        self.logger = self.cog.logger
         self.lobby = lobby
         super().__init__(timeout=3600, *args, **kwargs)
         if self.middlebutton:
-            self.customize_middle_button(self.middlebutton)
+            self._customize_middle_button(self.middlebutton)
         b = discord.utils.find(lambda c: c.custom_id == __file__ + "lobbyjoin", self.children) #TODO check if multiple lobbies can be open at the same time and if this can cause issues, maybe add lobby code to custom id or smth
         b.disabled = self.lobby.private
 
-    @discord.ui.button(style=discord.ButtonStyle.green, emoji=emoji.emojize(":inbox_tray:"), custom_id=__file__ + "lobbyjoin") #potentially just name it random() + lobbyjoin and then look for it using lobbyjoin in custom_id?
+    @discord.ui.button(style=discord.ButtonStyle.green, emoji=emoji.emojize(":inbox_tray:"), custom_id=__file__ + "lobbyjoin") #potentially just name it random() + lobbyjoin and then look for it using lobbyjoin in custom_id? actually maybe add the lobbyid
     async def joinbutton(self, button, interaction):
         """Join lobby"""
-        self.cog.logger.debug(f"{interaction.user} clicked join")
+        self.logger.debug(f"{interaction.user} clicked join")
         player = self.cog.getPlayer(interaction.user)
-        if await player.can_join(interaction, self.lobby):
+        able, reason = player.can_join(self.lobby)
+        if able:
             await self.lobby.addPlayer(interaction, player)
+        else:
+            await embedutil.error(interaction, f"Unable to join lobby. {reason}", ephemeral=True, delete=10)
 
     @discord.ui.button(style=discord.ButtonStyle.red, emoji=emoji.emojize(":outbox_tray:"))
     async def leavebutton(self, button, interaction):
@@ -457,9 +478,9 @@ class LobbyView(discord.ui.View):
         try:
             await self.lobby.on_leave(player, "left")
         except Exception as e:
-            self.cog.logger.error(
+            self.logger.error(
                 f"Error in on_leave for lobby {self.lobby.code} and player {player.userid}.  Probably doesn't have permissions to DM. Real error: {e}")
-        self.cog.logger.debug(f"{interaction.user.name} clicked leave")
+        self.logger.debug(f"{interaction.user.name} clicked leave")
 
     @discord.ui.button(style=discord.ButtonStyle.grey, emoji=emoji.emojize(":no_entry_sign:", language="alias"), disabled=True, custom_id=__file__ + "lobbymiddle")
     async def middlebuttoncb(self, button, inter):
@@ -471,25 +492,28 @@ class LobbyView(discord.ui.View):
         """Ready / Unready"""
         player: Player = self.cog.getPlayer(interaction.user)
         if player.inLobby:
-            self.cog.logger.debug(f"{interaction.user.name} requested ready/unready")
-            if await player.can_ready(interaction, self.lobby):
+            self.logger.debug(f"{interaction.user.name} requested ready/unready")
+            is_able, reason = player.can_ready(self.lobby)
+            if not is_able:
+                await embedutil.error(interaction, f"Unable to ready up. {reason}", ephemeral=True, delete=10)
+            if is_able or player.ready: #people will probably forget to add self.ready into the can_ready check so i put it here manually
                 player.ready = not player.ready
                 try:
                     await self.lobby.on_ready(player, interaction)
                 except Exception as e:
-                    self.cog.logger.error(
+                    self.logger.error(
                         f"Error in on_ready for lobby {self.lobby.code} and player {player.userid}.  Probably doesn't have permissions to DM. Real error: {e}")
                 await self.lobby.readyCheck() #i wanted to run the on_ready before readycheck() as the readycheck updates the embed display and maybe the on_ready can change something that should be displayed in the embed, but this also means that if on_ready throws an error, the embed wont update and the player might be stuck in a state where they are ready but the embed shows them as not ready, or vice versa.
         else:
             await embedutil.error(interaction, "You are not in this lobby.")
-            self.cog.logger.debug(f"{interaction.user.name} clicked ready on not joined lobby")
+            self.logger.debug(f"{interaction.user.name} clicked ready on not joined lobby")
 
     @discord.ui.button(style=discord.ButtonStyle.blurple, emoji=emoji.emojize(":right_arrow:"), disabled=True, custom_id=__file__ + "lobbystart")
     async def startbutton(self, button, interaction):
         """Start game"""
         await interaction.response.defer()
         if self.lobby.lobbyleader == interaction.user:
-            if await self.canStart(interaction):
+            if await self.can_start(interaction): #why have a separate canStart if it is already done by readycondition
                 await self.on_start(interaction)
                 try:
                     await self.lobby.managemsg.edit(embed=None, view=None, content="Game started.", delete_after=5.0)
@@ -511,23 +535,24 @@ class LobbyView(discord.ui.View):
                             raise e
         else:
             await embedutil.error(interaction, "You are not the leader of this lobby.")
-            self.cog.logger.debug(f"{interaction.user.name} wanted to start game when not lobbyleader")
+            self.logger.debug(f"{interaction.user.name} wanted to start game when not lobbyleader")
 
     async def on_timeout(self) -> None:
         await self.lobby.disband()
         self.lobby.cog.logger.debug("on_timeout fired")
+        self.stop()
         # del self.cog.lobbies[self.lobby.code]
         del self
 
-    def customize_middle_button(self, button: Callable[[Lobby], discord.ui.Button]):
+    def _customize_middle_button(self, button: Callable[[Lobby], discord.ui.Button]):
         but = discord.utils.find(lambda b: b.custom_id == __file__ + "lobbymiddle", self.children)
         which = self.children.index(but)  # usually 3rd (index 2) lol, but I don't want to hardcode it
         self.children[which] = button(self.lobby)
 
-    async def canStart(self, interaction: discord.Interaction):
+    async def can_start(self, interaction: discord.Interaction):
         return True
-        # to be overwritten in subclasses, something like not enough words loaded in or not everyone has unique icon or teams not balanced
-        # use interaction to signal to the user what is wrong
+        # to be overwritten in subclasses, for some more advanced conditions, where the basic is done, like everyone has chosen an icon or everyone is in a team, but something like not everyone has unique icon or teams not balanced
+        # and you would use the interaction to signal to the user what is wrong?
 
     async def on_start(self, interaction: discord.Interaction):
         # to be overwritten in subclasses, something like sending an ephemeral admin view
@@ -535,8 +560,9 @@ class LobbyView(discord.ui.View):
 
 
 class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[xyview]? below too in init
-    def __init__(self, interaction: discord.Interaction, cog: LobbyCog, private=False, lobbyView: Callable[[Lobby], LobbyView] = None, adminView: Callable[[Lobby], AdminView] = None, game: type[Game] = None, minplayers: int = None, maxplayers: int = None):
+    def __init__(self, interaction: discord.Interaction, cog: LobbyCog, private=False, lobbyView: type[LobbyView] = None, adminView: type[AdminView] = None, game: type[Game] = None, minplayers: int = None, maxplayers: int = None):
         self.cog: LobbyCog = cog
+        self.logger = cog.logger
         self.maxplayers: int = maxplayers or 25  # there is 25 slots in the kick dropdown, can populate 24 because cancel option, but fits perfectly because cant kick yourself. Also embeds can have only 25 fields
         self.minplayers: int = minplayers or 2  # mega lobby could be done, players printed in description, kick using pagi
         self.GAME_NAME = cog.GAME_NAME # TODO large lobby cog with pagination for players list and different embed etc, but this assert will be a problem
@@ -548,19 +574,19 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
         self.players: list[PlayerT] = []
         self.private: bool = private
         while (code := "".join([random.choice(string.ascii_uppercase) for _ in range(4)])) in self.cog.lobbies:
-            self.cog.logger.debug(f"generating lobbycode {code}")
+            self.logger.debug(f"generating lobbycode {code}")
             continue
         self.code: str = code
         self.ongoing: bool = False
-        self.managemsg: discord.Message | None = None
-        self.messageid: discord.Message | None = None
+        self.managemsg: discord.Message = None
+        self.messageid: discord.Message = None
         self.lobbyleader = interaction.user
         self.cog.lobbies[self.code] = self
-        self.lobbyView: Callable[[Lobby], discord.ui.View] = lobbyView or LobbyView
-        self.adminView: Callable[[Lobby], discord.ui.View] = adminView or AdminView
+        self.lobbyView: Callable[[Lobby], LobbyView] = lobbyView or LobbyView
+        self.adminView: Callable[[Lobby], AdminView] = adminView or AdminView
 
     async def on_disband(self):
-        """To be overwritten in subclasses
+        """To be overwritten in subclasses.
         Can be used to clean up things that need to be done when the lobby is disbanded."""
         pass
 
@@ -589,15 +615,20 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
         """To be overwritten in subclasses, to add custom ready conditions before being able to start the game.
         After adding custom conditions you can call the super().readyCondition() to check if all players are ready
         and minimum player count is met."""
-
-        readys = [i.is_ready() for i in self.players]
-        return all(readys) and len(readys) >= self.minplayers
+        readys = []
+        for p in self.players:
+            if not p.can_ready(self)[0]:
+                p.ready = False
+                readys.append(False)
+            else:
+                readys.append(p.ready)
+        return all(readys) and self.maxplayers >= len(readys) >= self.minplayers
 
     def show_players(self, embedVar: discord.Embed) -> discord.Embed:
         """Enumerates players in the lobby embed as fields. Will fail if there's more than 25 players (not possible), as that is Discord's embed limitation."""
         i = 1
         for i, player in enumerate(self.players, start=1):
-            embedVar.add_field(name=f"{i}. {player}", value="Ready? " + (
+            embedVar.add_field(name=f"{i}. {player}"[:255], value="Ready? " + (
             emoji.emojize(":cross_mark:"), emoji.emojize(":check_mark_button:"))[bool(player.ready)], inline=False)
         while i < self.minplayers:
             embedVar.add_field(name="[Empty]", value="Ready? " + emoji.emojize(":cross_mark:"), inline=False)
@@ -609,7 +640,7 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
         return f" ({len(self.players)}/{self.maxplayers})" if self.maxplayers else ""
 
     def add_footer(self, embedVar: discord.Embed):
-        """Adds footer to the lobby embed showing button explanation. They are taken from the button callback docstrings."""
+        """Adds a footer to the lobby embed showing button explanation. They are taken from the button callback docstrings."""
         footertext = ""
         for b in filter(lambda i: isinstance(i, discord.ui.Button), self.lobbyView(self).children):
             if isinstance(b.callback, partial):
@@ -627,16 +658,14 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
                                                                f"When everybody is ready, the start game ({emoji.emojize(':right_arrow:')}) button will enable under the lobby message."), #TODO probably should make this customizable too
                                                 ephemeral=True,
                                                 view=self.adminView(self))
-        # self.managemsg = await interaction.original_message()
         if self.messageid:
             await self.messageid.edit(
                 embed=discord.Embed(title="The lobby you are looking for has moved", description="see below"),
                 view=None, delete_after=30.0)
-        lobbymessage = await interaction.channel.send(embed=discord.Embed(title="Generating lobby..."))
-        self.messageid = lobbymessage
+        self.messageid = await interaction.channel.send(embed=discord.Embed(title="Generating lobby..."))
         await self.messageid.edit(embed=self.show(), view=self.lobbyView(self))
         if self.ongoing:
-            self.cog.logger.warning("Lobby message sent while game is already ongoing, or lobby.ongoing flag is falsely left set True. This might prevent you from starting a game. Set this attribute to False after ending a game.")
+            self.logger.warning("Lobby message sent while game is already ongoing, or lobby.ongoing flag is falsely left set True. This might prevent you from starting a game. Set this attribute to False after ending a game.")
 
     def show(self) -> discord.Embed: #todo potentially rename
         """render the lobby embed"""
@@ -668,12 +697,12 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
         if not self.ongoing:
             if self.readyCondition():
                 discord.utils.find(lambda b: b.custom_id == __file__ + "lobbystart", viewObj.children).disabled = False
-                self.cog.logger.debug("all players ready to go")
+                self.logger.debug("all players ready to go")
                 await self.messageid.edit(embed=self.show(), view=viewObj)
                 return True
             else:
                 discord.utils.find(lambda b: b.custom_id == __file__ + "lobbystart", viewObj.children).disabled = True
-                self.cog.logger.debug("not all players ready to go")
+                self.logger.debug("not all players ready to go")
         else:
             for child in viewObj.children:
                 child.disabled = True
@@ -697,7 +726,7 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
             self.cog.savePlayers(self.players)
         else:  # should not be achievable as the start button should be disabled when game is ongoing, maybe delete
             await embedutil.error(interaction, "A game is already running.")
-            self.cog.logger.warning("ongoing game")
+            self.logger.warning("ongoing game")
 
     async def addPlayer(self, interaction: discord.Interaction, player: PlayerT) -> None:
         if not self.maxplayers or len(self.players) < self.maxplayers:
@@ -709,7 +738,7 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
                     player.inLobby = self.code
                 else:
                     await embedutil.error(interaction, f"You are already in a lobby. Try {self.cog.leavecmd.get_mention(self.cog.TESTSERVER)}", delete=10)
-                    self.cog.logger.debug("already in lobby")
+                    self.logger.debug("already in lobby")
                     return
                 # await self.messageid.edit(embed=self.show()) #redundant: gets updated in readyCheck again too so
                 self.players.append(player)
@@ -717,9 +746,9 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
                 try:
                     await self.on_join(player, interaction) # move this to last row, god knows what breaking code do people write
                 except Exception as e:
-                    self.cog.logger.error(f"Error in on_join for lobby {self.code} and player {player.userid}.  Probably doesn't have permissions to DM. Real error: {e}")
+                    self.logger.error(f"Error in on_join for lobby {self.code} and player {player.userid}.  Probably doesn't have permissions to DM. Real error: {e}")
             else:
-                self.cog.logger.error("ongoing game")  # shouldn't be a possibility, remove buttons from lobbymsg after start
+                self.logger.error("ongoing game")  # shouldn't be a possibility, remove buttons from lobbymsg after start
         else:
             await embedutil.error(interaction, "Lobby is already full!")
 
@@ -743,37 +772,37 @@ class Lobby[PlayerT]: #TODO typehint for the views feels wrong? should be type[x
                 await embedutil.error(interaction, "You are not in this lobby.", delete=10)
                 return False
         else:
-            self.cog.logger.warning("game ongoing")
+            self.logger.warning("game ongoing")
             # TODO allow leaving xd
             return False
 
     async def disband(self):
-        await self.on_disband()
         for player in self.players:
             player.inLobby = None
             player.ready = False
-            if hasattr(player, "team") and player.team:
-                player.team.remove(player)
+            if hasattr(player, "team") and player.team: #this should be in teamlobby but im being cautious
+                player.team.remove(player) # to be frank most of these attributes should be reset in the player class init, this is just legacy
             try:
                 await self.on_leave(player,  "disbanded")
             except Exception as e:
-                self.cog.logger.error(
+                self.logger.error(
                     f"Error in on_leave for lobby {self.code} and player {player.userid}. Probably doesn't have permissions to DM. Real error: {e}")
         try:
             await self.managemsg.delete()
-        except (discord.errors.NotFound, discord.errors.HTTPException): #TODO why am i exactly doing edit when it is being deleted?
+        except (discord.errors.NotFound, discord.errors.HTTPException): #why am i exactly doing edit when it is being deleted?
             try:
                 await self.managemsg.edit(embed=discord.Embed(title="Lobby disbanded."), view=None, delete_after=5.0)
             except (discord.errors.NotFound, discord.errors.HTTPException):  # what is this try except hell xdd
                 pass
         try:
             await self.messageid.edit(embed=discord.Embed(title="Lobby disbanded.", description=f"Make a new one with {self.cog.startcmd.get_mention(self.cog.TESTSERVER)}"), view=None, delete_after=30.0)
-        except discord.errors.NotFound:  # disbanding after a game cannot edit message as it doesn't exist anymore
+        except (discord.errors.NotFound,discord.errors.HTTPException):  # disbanding after a game cannot edit message as it doesn't exist anymore
             pass
         try:
             del self.cog.lobbies[self.code]
         except KeyError:
-            self.cog.logger.debug(f"{self.code} already deleted, why is still wanting to timeout and disband?")
+            self.logger.debug(f"{self.code} already deleted")
+        await self.on_disband()
 
     def tojson(self):
         return json.dumps(self.toDict(), default=lambda o: o.__dict__ if hasattr(o, "__dict__") else str(o), indent=4)
@@ -794,13 +823,12 @@ class PlayerProt(Protocol):
     def __init__(self, discorduser: discord.Member | dict | discord.User):
         ...
 
-    def is_ready(self) -> bool:
+    def can_ready(self, lobby: Lobby) -> tuple[bool, str]:
+        """Return (True, "") if player may ready, otherwise (False, reason)."""
         ...
 
-    async def can_ready(self, interaction: discord.Interaction, lobby: Lobby) -> bool:
-        ...
-
-    async def can_join(self, interaction: discord.Interaction, lobby: Lobby) -> bool:
+    def can_join(self, lobby: Lobby) -> tuple[bool, str]:
+        """Return (True, "") if player may join, otherwise (False, reason)."""
         ...
 
     def toDict(self) -> dict:
@@ -814,7 +842,10 @@ class Player:
     Usage:
 
     player = cog.getPlayer(interaction.user)
-    player.ready = True
+
+    player.score += 5
+
+    player.statistics["Games won"] += 1
 
     When subclassing, add persistent attributes before calling
     super().init(), and temporary ones that reset each game, after it.
@@ -827,11 +858,11 @@ class Player:
     :ivar name: The user's username in discord
     """
     def __init__(self, discorduser: discord.Member | dict | discord.User | PlayerT):
-        self._important = ["userid", "statistics"] + list(self.__dict__.keys())  # only these attrs will be saved #TODO possible to set automatically? check which attrs were defined before the super() call and set those?
+        self._important = ["userid", "statistics"] + list(self.__dict__.keys())  # only these attrs will be saved
 
         if isinstance(discorduser, dict):
             for k, v in discorduser.items():
-                if k in ("statistics", "stats"): #TODO remove stats, it was for backwards compat
+                if k in ("statistics", ): #removed stats, it was for backwards compat
                     setattr(self, "statistics", defaultdict(int))
                     self.statistics.update(v)
                 elif k.endswith("_dt"):    #TODO document this
@@ -863,19 +894,17 @@ class Player:
     @property
     def name(self):
         return self.user.name
-    # you may implement something like which team they are on or how many points or words submitted
+    #
+    # def is_ready(self):
+    #     return self.ready
 
-    def is_ready(self):
-        return self.ready
-    # you may implement something like has team
-
-    async def can_ready(self, interaction: discord.Interaction, lobby: Lobby) -> bool:  # TODO why is can_ready in Player instead of Lobby?
-        return True  # you may implement something like has enough words
+    def can_ready(self, lobby: Lobby) -> tuple[bool, str]:  # TODO why is can_ready in Player instead of Lobby?
+        return True, ""  # you may implement something like has enough words
     # use interaction to signal to the user why they cannot ready up
 
-    async def can_join(self, interaction: discord.Interaction, lobby: Lobby) -> bool:  # TODO same
-        return True  # you may implement something like has role, level, permission
-    # use interaction to signal to the user why they cannot join
+    def can_join(self, lobby: Lobby) -> tuple[bool, str]:  # TODO same
+        return True, ""  # you may implement something like has role, level, permission
+    # use reason to signal to the user why they cannot join
 
     def __hash__(self):
         return hash(self.userid)
@@ -886,13 +915,14 @@ class Player:
     def __eq__(self, other):
         if isinstance(other, Player):
             return self.userid == other.userid
-        # elif type(other) == "MockPlayer": # dont want to import it, but actually it is still subclass of Player
+        # elif type(other) == "MockPlayer": # don't want to import it, but actually it is still subclass of Player
         #     return self.userid == other.userid
         else:
             raise NotImplementedError(f"Comparison between {self.__class__} and {other.__class__}")
 
 
     def __str__(self):
+        # you may implement something like which team they are on or how many points or words submitted
         return f"{self.name}"  # some ideas below
         # return f"{self.name} ({self.points} points)"
         # return f"{self.name} ({len(self.words)} words)"
@@ -910,10 +940,11 @@ class Game(ABC, Generic[PlayerT]):
     def __init__(self, lobby: Lobby[PlayerT]):
         self.players: list[PlayerT] = lobby.players
         self.lobby: Lobby[PlayerT] = lobby
+        self.channel: discord.TextChannel | None = lobby.managemsg # might be different though if you're creating a temp channel for it for example, set it accordingly.
 
     @abstractmethod
-    async def start(self, interaction: discord.Interaction|discord.Message):  # i debated long whether i should have Message here in the signature or Interaction, as it is advised to send new messages to the channel directly instad of as an inter response but oh well
-        await interaction.channel.send("Game started with players: " + ", ".join([p.name for p in self.players]))
+    async def start(self, interaction: discord.Interaction|discord.TextChannel):  # i debated long whether i should have Message here in the signature or Interaction, as it is advised to send new messages to the channel directly instad of as an inter response but oh well
+        await interaction.send("Game started with players: " + ", ".join([str(p.name) for p in self.players]))
         await interaction.send("Make sure to do interaction.channel.send instead of directly responding to the interaction as they cannot be edited nor used after 15 minutes of playing", ephemeral=True)
 
     def getPlayer(self, user:  int | discord.Member | discord.User) -> PlayerT:
@@ -930,6 +961,7 @@ class Game(ABC, Generic[PlayerT]):
 
         @discord.ui.button(label="Return to lobby")
         async def callback(self, button, inter):
+            self.game.lobby.ongoing = False
             for p in self.game.lobby.players:
                 p.ready = False
             await self.game.lobby.send_lobby(inter)

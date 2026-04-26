@@ -17,9 +17,6 @@ class Testing(commands.Cog):
     async def colored(self, interaction: discord.Interaction, txt: str, color: str = discord.SlashOption(choices=Colored.list().keys())):
         colorobj = Colored.get_color(color)
         ctxt = colorobj.text(txt)
-        print(self.__class__)
-        print(__class__)
-        print(self.__module__)
         await interaction.send(ctxt + colorobj.emoji_heart)
         await interaction.send(Colored.green.text("Success!"), delete_after=5)
 
@@ -28,11 +25,6 @@ class Testing(commands.Cog):
         a = list(string.ascii_uppercase)
         inv: Inventory = Inventory(a)
         await inv.render(interaction, ephemeral=True)
-
-
-    @discord.slash_command(name="userselect", guild_ids=TESTSERVER)
-    async def invtest(self, interaction: discord.Interaction, usr: discord.User):
-        await interaction.response.send_message(usr.display_name)
 
 
 def setup(client):

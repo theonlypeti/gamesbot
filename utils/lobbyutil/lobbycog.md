@@ -6,7 +6,7 @@ The `LobbyCog` class handles the creation and management of game lobbies for dis
 
 ## Subclassing
 
-To subclass `LobbyCog`, you need to create a new class that inherits from `LobbyCog`. In the `DiceWarriorsCog` file, this is done with the `DiceCog` class:
+First create a new class that inherits from `LobbyCog`. In the `DiceWarriorsCog` file, this is done with the `DiceCog` class:
 
 ```python
 class DiceCog(lobby.LobbyCog):
@@ -52,9 +52,9 @@ for example: `/dice help`
 
 The `LobbyCog` creates the following subcommands:  
 - `help`: This subcommand shows the help manual for the game and the bot.
-- `stats`: This subcommand shows the user's statistics across all the games they've played.
-- `join`: This subcommand allows a user to join an existing lobby.
-- `leave`: This subcommand allows a user to leave the lobby they are currently in.
+- `stats`: This shows the user's statistics across all the games they've played.
+- `join`: Allows a user to join an existing lobby. Particularly useful for private lobbies.
+- `leave`: Allows a user to leave the lobby they are currently in.
 - `start`: This subcommand creates a lobby for users to join and to start the game.
 
 
@@ -69,27 +69,15 @@ self.add_subcommand(name="leaderboard",
 
 async def leaderboard(self, interaction: nextcord.Interaction):
     """Displays who the best player is (not really)"""
-    await interaction.send("Leaderboard")
+    await interaction.send("@theonlypeti")
 ```
 
 You can add more parameters to the callback command. You may use typehints or `nextcord.SlashOption` to specify their types.
 
-Supplying a docstring to the method will make it appear in the help command as the command's explanation.
+Supplying a docstring to the method will make it appear in the help command as the command's explanation, while the description parameter in the `add_subcommand` method will be shown in the discord command list UI in chat.
 
-Adding other base commands can be done normally as you would in a nextcord bot, using a `slash_command` decorator.
-However, to make them appear in the help command, you need to add them to the help subcommand's list of commands manually using `self.other_commands`.
-
-```python
-    @nextcord.slash_command(name="test")
-    async def testcmd(self, interaction: nextcord.Interaction):
-        """Test description"""
-        await interaction.response.send_message("Testing")
-
-    self.other_commands.update({self.testcmd.name: self.testcmd})
-```
-Subcommands of your new commands are not walked through by the help command and should be added to the `self.other_commands` dictionary manually.
-
-To be mentionable they need to have the same guild_ids as the `LobbyCog` instance's `TESTSERVER_ID`, be it None or a guild id.
+Adding other base slash commands to the cog can be done normally as you would in a normal cog of a Nextcord bot, using a `slash_command` decorator. `subcommand`s work as well.
+To be mentionable in the help command, they need to have the same guild_ids as the `LobbyCog` instance's `TESTSERVER_ID`, be it None or a guild id.
 
 `nextcord.UserCommand` and `nextcord.MessageCommand` are not mentionable, therefore cannot appear in the help command.
 
@@ -103,8 +91,8 @@ The `Player` class represents a player in a game lobby. It keeps track of the pl
 ## Initialization
 
 The `Player` class takes a `nextcord.User` object or a dictionary of player-like attributes as a parameter when it is initialized. 
-This class is however usually handled by the lobby and game classes and you will not need to initialize it yourself.
-Instead use the getPlayer method of your `LobbyCog` subclass to get the player object for a specific Discord user.
+This class is however usually handled by the lobby and game classes, and you will not need to initialize it yourself.
+Use the getPlayer method of your `LobbyCog` subclass instead, to get the player object for a specific Discord user.
 
 ```python
 player = cog.getPlayer(interaction.user)
@@ -117,9 +105,9 @@ The `Player` class has the following attributes:
 - `userid`: The Discord user id.
 - `statistics`: A dictionary of statistics over the games played like wins, losses, etc.
 - `ready`: Whether the player is ready.
-- `inLobby`: The lobby code the player is in or None.
-- `user`: The Discord user object.
-- `name`: The user's username in Discord.
+- `inLobby`: The lobby code the player is in or `None`.
+- `user`: The `nextcord.User` object. Useful for getting avatars, nicknames, colors, roles etc.
+- `name`: The player's username in Discord.
 
 ## Methods
 
@@ -167,10 +155,10 @@ def __str__(self) -> str:
 
 ## Subclassing
 
-To subclass `Player`, you need to create a new class that inherits from `Player`. In the `DiceWarriorsCog` file, this is done with the `DicePlayer` class:
+To subclass `Player`, you need to create a new class that inherits from `Player`. (In the `DiceWarriorsCog` file, this is done with the `DicePlayer` class.)
 
 ```python
-class DicePlayer(lobby.ClovecePlayer):
+class MyPlayer(lobby.Player):
     def __init__(self, user: nextcord.User):
         self.money = 1000
         super().__init__(user)
@@ -363,7 +351,7 @@ Both of these views take the lobby as a parameter.
 
 The `LobbyView` class in the `lobbycog.py` file is used to display the main buttons for the lobby. This includes buttons for joining, leaving, readying up, and starting the game. 
 
-If you want to customize the `LobbyView` for a specific type of lobby, you can create a subclass of `LobbyView`. This allows you to add additional buttons or change the behavior of existing buttons (like change ready or join conditions).
+If you want to customize the `LobbyView` for a specific type of lobby, you can create a subclass of `LobbyView`. This allows you to add additional buttons or change the behavior of existing buttons.
 
 To create a subclass of `LobbyView`, you need to define a new class that inherits from `LobbyView`. In the `__init__` method of your subclass, you can add or modify buttons.
 
@@ -469,36 +457,94 @@ class TeamGameCog(lobby.LobbyCog):
                          playerclass=teams.TeamPlayer,
                          lobbyclass=teams.TeamLobby)
 ```
-        
 
-The `Team` class is used to manage players in a team, their points, words or whatever you implement. They are automatically managed by the `TeamLobby` class.
-If you wish to subclass this class to add more attributes or methods, you can do so. You will need to pass this new class into `TeamLobby(teamclass=YourTeamClass)`.
+An example of using teams in a game is in the `codenamescog.py` file, where players of a certain team are all scored, eliminated and controlled together as a group.
+Teams can be used to share resources, inventory, points, HP or intel between players. None of these attributes are by default included, tailor the Team class to your needs.
 
-The `TeamLobby` class modifies the lobby buttons to include a team selector and the embed will show which player belongs to which team.
+## Team Class
+
+The `Team` class is used to manage players in a team, their points, words or whatever you implement. 
+They are automatically managed by the `TeamLobby` class and can be subclassed to add features. 
+If you do so, you will need to pass this new class into `TeamLobby(teamclass=YourTeamClass)`.
+
+```py
+import utils.lobbyutil.teamutil
+
+class MyTeamClass(utils.lobbyutil.teamutil.Team):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.points = 0
+        self.discovered = []
+    
+class MyTeamLobby(utils.lobbyutil.teamutil.TeamLobby):
+    def __init__(self, *args, **kwargs):
+        self.teamcolors = ["black", "white", "purple"]
+        self.maxteams = 2
+        super().__init__(*args, teamclass=MyTeamClass, **kwargs)
+```
+
+A team has a `name`, an `emoji`, a `color` and a list of `players`. The name and emoji are used to display the team in the lobby embed, and are usually inherited from the color, unless customized. 
+The color can be used for color-coding text in games using `Team.color.text("your text")` to get a colored string, or `Embed(color=Team.color.dccolor)` for color coded embeds.
+The Team's own `minplayers` and `maxplayers` count will need to be respected to pass the ready condition check of the lobby. By default they are 2 and 25.
+The `eliminated` attribute is not directly used in the lobby, but can be used in games to mark a team as eliminated and change their behavior accordingly.
+
+Four teams of the basic colors are created by default (think Simon says or Kahoot!), but you can change this by changing `self.teamcolors` in a subclassed `TeamLobby`.
+It should be a list of lowercase color names, found in `utils.Colored.Colored.list()`.
+Alternatively you can create your own teams in the `self.init_teams(teamcolors: list[str])` method of your subclassed TeamLobby and add them yourself.
+Teams can be created using the init constructor by passing it the name, emoji and color; or using the `Team.from_color(Colored)` classmethod, supplying a Colored class.
+
+
+```py
+class MyTeamLobby(TeamLobby):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def init_teams(self, teamcolors: list[str]) -> list[Team]:
+
+        teams = [
+            Team("Team Cats", emoji="🐱", color=Colored.yellow),
+            Team("Team Dogs", emoji="🐶", color=Colored.brown),
+            # Horde/Alliance/Forsaken
+            # America/Europe/Asia
+            # Defenders / Attackers
+            # Seekers / Hiders
+            Team.from_color(Colored.red)
+        ]
+        return teams
+```
+
+### Other Team related classes
+
+The `TeamLobby` class modifies the lobby buttons to include a team selector for the players, and the embed will show which player belongs to which team. 
+There are two new attributes, `minteams` and `maxteams`, which are the amount of teams players need to split into at least and at most. The ready condition will not pass, if this is not respected and the amount of players in each team is not within the `Team.minplayers` and `Team.maxplayers` limits.
+Use this class as `LobbyView` parameter in your `LobbyCog`, as shown in an above codeblock.
+
+The `TeamPlayer` class adds a `team` attribute, modifies the ready condition to check if the player has chosen a team, and changes how it is displayed in the lobby embed.
+You can subclass this class to add more attributes or methods, but make sure to call `super().__init__()` in the `__init__` method of your subclass. 
+Use this class as a `playerclass` parameter in your `LobbyCog` to have the players in your game be team players.
+
+`TeamAdminView` adds a randomize teams button, which splits every player into a team randomly if possible, until `TeamLobby.minteams` amount of teams are filled.
+It bears no other significance, it is mentioned here only to document what it implements. You may customize this view just like a regular AdminView.
+This class is by default used as the `adminView` parameter in your `TeamLobby` subclass.
+
 
 # Help categories
 
-The `LobbyCog` class automatically creates 3 help categories for your game. These can be viewed using the `/BASE_GAME_CMD help` command. They include a help topic for the game `commands`, the `rules` and `credits`.
+The `LobbyCog` class automatically creates 3 help categories for your game, which can be viewed using the `/BASE_GAME_CMD help` command.
+Adding new help categories is done by creating an instance of the `HelpCategory` class and adding it using `add_help_category`.
+
+```python
+self.add_help_category(HelpCategory(label="House Rules",
+                                    description="This category is about house rules",
+                                    emoji="🎲",
+                                    helptext="There are no rules, the host always wins.",
+                                    image="https://image-explaing-my-house.rules"))
+```
+The label, description and emoji appear in the dropdown menu, while the helptext and image appear in the help message when the category is selected. 
+The image may be a URL to an online image or a path to a local image.
+
+The 3 included categories are help topics about `commands`, the `rules` and `credits`.
 The credits and rules category are empty and to be filled by the game author, while the game commands category is automatically filled with the game's commands and their descriptions.
-
-## Adding commands to the help command
-
-By default the help command walks through each subcommand in its' base slash command and adds the docstring of the method as the command's explanation. If you wish to add a command to the help command, you need to add it to the `self.other_commands` dictionary in your subclassed `LobbyCog` class.
-
-```python
-self.other_commands.update({self.testcmd.name: self.testcmd})
-#where self.testcmd is a method with a slash_command decorator
-```
-
-Adding subcommands to the base slash command is slightly different. You need to add a method to your subclassed `LobbyCog` class with the `add_subcommand` method and provide the name, callback and description of the subcommand.
-
-```python
-self.add_subcommand(name="leaderboard",
-                    callback=self.leaderboard,
-                    description="Displays the best player")
-```
-
-Again, the docstring of the `self.leaderboard` method will be used as the command's explanation. These steps are necessary for the commands to appear in the help category.
 
 ## Adding rules and credits
 
@@ -510,29 +556,16 @@ self.credits = """Made by @theonlypeti"""
 self.rules = """Don't talk about the dice club."""
 ```
 
-Adding new help categories is done by creating an instance of the `HelpCategory` class and adding it using `add_help_category`.
-
-```python
-self.add_help_category(HelpCategory(label="House Rules",
-                                    description="This category is about house rules",
-                                    emoji="🎲",
-                                    helptext="There are no rules, the host always wins.",
-                                    image="https://image-explaing-my-house.rules"))
-```
-
 When you want to mention a command in a help category, it could happen that `command.get_mention()` will throw an error regarding the command not being registered. 
 This happens because the commands are registered after all the cogs are loaded, but the helptext is defined before the bot logs in and registers all the commands.
 You would need to define the helptext after the bot is `await wait_until_ready()`, or generate the helptext dynamically when called.
 
+(p.s. This potentially throws, but is intended! There may only be 24 help categories. If you need more, your game is already too complex and noone is going to read that. Similarly, helptext may be 2000 characters long. If you need more, split the category, as people will not read that much text anyway.)
+
 # Timer class
 
 The `Timer` class provides a lightweight, asyncio-based countdown timer used throughout games and lobbies.
-
-## Purpose
-
-Use `Timer` to implement turn timers, countdowns, or other timed events inside your game. It integrates with the lobby/game model and provides small interactive views (Start/Stop buttons) as well as programmatic control.
-
-## Key behaviours
+Use it to implement turn timers, countdowns, or other timed events inside your game. It integrates with the lobby/game model and provides small interactive views (Start/Stop buttons) as well as programmatic control.
 
 - `start(interaction: Optional[Interaction])` schedules the countdown as a background asyncio task. If an `interaction` is supplied, permission checks are performed with `can_start`.
 - `stop(interaction: Interaction)` signals the timer to stop early and runs the `on_stop` hook.

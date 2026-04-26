@@ -126,12 +126,12 @@ async def on_interaction(inter: discord.Interaction):
             if inter.data.get("component_type", None) == 2:
                 button: discord.ui.Button | None = discord.utils.find(lambda b: b.custom_id == buttonid, sum([v.children for v in client.all_views],[]))
                 button: str = f"{button.__class__}: [{button.label or button.emoji=}]" if button else None
-                tolog = f"[{inter.user}] used interaction [{button}] in: [{inter.guild}/{inter.channel}] on [{inter.message.created_at}]"
+                tolog = f"[{inter.user}] used interaction [{button}] in: [{inter.guild}/{inter.channel}] on msg from [{inter.message.created_at}]"
 
             elif inter.data.get("component_type", None) == 3:
                 dd: discord.ui.Select | None = discord.utils.find(lambda v: v.custom_id == buttonid, [i for i in sum([v.children for v in client.all_views], [])])
                 dd: str = f"{dd.__class__}: {dd.placeholder=}" if dd else None
-                tolog = f"[{inter.user}] used interaction [{dd}, {inter.data.get('values')=}] in: [{inter.guild}/{inter.channel}] on [{inter.message.created_at}]"
+                tolog = f"[{inter.user}] used interaction [{dd}, {inter.data.get('values')=}] in: [{inter.guild}/{inter.channel}] on msg from [{inter.message.created_at}]"
 
             else:
                 if inter.guild is None:

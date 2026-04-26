@@ -2,13 +2,13 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import timedelta
-from logging import Logger
 import emoji
 import nextcord as discord
+from utils.lobbyutil.Colored import Colored
 from utils.lobbyutil.Inventory import Inventory
 import utils.lobbyutil.lobbycog as lobby
 from utils.lobbyutil.Timer import Timer
-from utils.lobbyutil.teamutil import MockPlayer
+from utils.lobbyutil.teamutil import MockPlayer, Team
 
 TESTSERVER = 860527626100015154
 root = os.getcwd()
@@ -24,10 +24,9 @@ class TestGameCog(lobby.LobbyCog):
                          gameclass=MyGame,
                          TESTSERVER_ID=TESTSERVER)
         self.client = client
-        self.logger: Logger = client.logger.getChild(f"{self.__module__}")
         self.logger.event("hi")
 
-        self.add_subcommand("ping", self.testtest, "Just testing")
+
         self.add_help_category(lobby.HelpCategory(label="Testing Category",
                                                   description="Just testing", emoji="🧪",
                                                   helptext="This is a test category for testing purposes.",
@@ -37,9 +36,9 @@ class TestGameCog(lobby.LobbyCog):
                                                   helptext="This is a test category for testing online image.",
                                                   image=fr"https://cdn.discordapp.com/avatars/617840759466360842/4469b4fbf681114f046e62f08e8a22e3.png?size=1024"))
 
-        self.other_commands = {self.testcmd2.name: self.testcmd2}
+        self.add_subcommand("ping", self.pingcmd, "Just testing")
 
-    async def testtest(self, interaction: discord.Interaction):  # testing adding subcommand to main game command
+    async def pingcmd(self, interaction: discord.Interaction):  # testing adding subcommand to main game command
         """Pong!"""
         await interaction.send("Pong!")
 
@@ -48,15 +47,21 @@ class TestGameCog(lobby.LobbyCog):
         """this does not appear"""
         ...
 
-    @testcmd.subcommand(name="mytest2")
+    @testcmd.subcommand(name="sub")
     async def testcmd2(self, interaction: discord.Interaction):  # testing adding this command to help above
-        """for testing"""
+        """for testing subcommands"""
         await interaction.send("Testing")
 
-    @testcmd.subcommand(name="mytest3")
+    @testcmd.subcommand(name="sub2")
     async def testcmd3(self, interaction: discord.Interaction):  # testing this command being left out of help
-        """nor this does not appear"""
-        await interaction.send("Testing3")
+        """Oh my another subcommand!"""
+        await interaction.send("Testing2")
+
+    @discord.slash_command(name="baseonly", guild_ids=(TESTSERVER,))  # testing adding additional commands to the cog outside of the game command
+    async def testcmdbase(self, interaction: discord.Interaction):
+        """testing base only command"""
+        await interaction.send("Working")
+
 
 
     class WordsPlayer(lobby.Player):
@@ -66,9 +71,15 @@ class TestGameCog(lobby.LobbyCog):
             self.money = 100
             super().__init__(user)
             self.words = []
+            self.points = 0
 
         def __str__(self):
-            return f"{self.user.display_name} ({self.words}) (${self.money})"
+            return f"{self.user.display_name} ({self.words}) (${self.money}) ({self.points} pts)"
+
+        def can_ready(self, lobby):
+            if len(self.words) < 4:
+                return False, "You need at least 4 words to be ready!"
+            return True, ""
 
     class WordsLobby(lobby.Lobby):
         def __init__(self, interaction, cog, private, game, minplayers, maxplayers):
@@ -78,24 +89,25 @@ class TestGameCog(lobby.LobbyCog):
                              game=game,
                              minplayers=minplayers,
                              maxplayers=maxplayers)
-            self.words = []
+
             mplayer = MockPlayer(name="Sanyi", cog=cog)
-            mplayer.points = 0
             mplayer.words = ["apple", "banana", "cherry", "date"]
             mplayer.ready = True
+            mplayer.points = 0
+            mplayer.team = Team.from_color(Colored.get_color("red")) #pre-adding anything possible, just for fun
             self.players.append(mplayer)
 
-        def readyCondition(self):  # testing overriding methods
-            return all([len(player.words) > 3 for player in self.players]) and super().readyCondition()
+        # def readyCondition(self):  # testing overriding methods
+        #     return super().readyCondition() and all([len(player.words) > 3 for player in self.players])
 
-        async def on_join(self, player, inter):
-            await player.user.send("Welcome to the game! Please add some words to the inventory.")
-
-        async def on_leave(self, player, reason):
-            await player.user.send("You have left the game. Reason: " + reason)
+        # async def on_join(self, player, inter):
+        #     await player.user.send("Welcome to the game! Please add some words to the inventory.")
+        #
+        # async def on_leave(self, player, reason):
+        #     await player.user.send("You have left the game. Reason: " + reason)
 
         async def on_ready(self, player, inter):
-            player.money += 50 #testing
+            player.money += 50 #testing, please don't actually do this lol
             self.cog.savePlayers(player)
 
         async def on_disband(self):
@@ -104,11 +116,14 @@ class TestGameCog(lobby.LobbyCog):
 
 class MyAdminView(lobby.AdminView):
     def __init__(self, lobby: TestGameCog.WordsLobby):
+        self.lobby = lobby
         super().__init__(lobby)
 
     @discord.ui.button(label="Manage words", style=discord.ButtonStyle.grey, emoji=emoji.emojize(":ledger:"))
     async def mngwords(self, button, inter):
-        inv: Inventory = Inventory(self.lobby.words)
+        inv: Inventory = Inventory([p.words for p in self.lobby.players], on_update=self.lobby.readyCheck)
+        # inv.children[3].disabled = True
+        inv.buttons["add"].disabled = True
         await inv.render(inter, ephemeral=True)
 
 
@@ -130,6 +145,7 @@ class Addwordsbutton(discord.ui.Button):
         inv.EMPTY_INV = inv.EMPTY_INV + " Please lol."  # test overriding inventory strings
         await inv.render(interaction, ephemeral=True)
 
+
 class MyGame(lobby.Game):
     def __init__(self, lobby: lobby.Lobby):
         self.lobby = lobby
@@ -140,25 +156,33 @@ class MyGame(lobby.Game):
     async def start(self, interaction: discord.Interaction):
         self.channel = interaction.channel
         await interaction.channel.send("Game has started!")
-        await self.next_turn()
+        while self.round < 5:
+            await asyncio.sleep(3)
+            self.round += 1
+            await self.next_turn()
+
+        await self.channel.send(
+            embed=discord.Embed(title="Thanks for playing!", color=discord.Color.green()),
+            view=self.ReturnButtonView(self)
+        )
+
 
     async def next_turn(self):
-        self.round += 1
         await self.channel.send(f"Next turn! {self.round}")
-        timer = Timer(self, duration=timedelta(seconds=10), name=f"Auto Timer {self.round}")
-        # await timer.start()
+        timer = Timer(self, duration=timedelta(seconds=12), name=f"Auto Timer {self.round}")
+        await timer.start()
         await timer.render(self.channel)
         if await timer.wait():
             await self.channel.send(f"{timer.name} ended, proceeding to next turn.")
         else:
             await self.channel.send(f"{timer.name} was stopped, proceeding to next turn.")
+        if timer.stopped_by:
+            self.lobby.logger.info(timer.stopped_by)
+            self.lobby.logger.info(self.getPlayer(timer.stopped_by).points)
+            self.getPlayer(timer.stopped_by).points += 50
+            self.lobby.logger.info(self.getPlayer(timer.stopped_by).points)
         # await self.channel.send()
-        await asyncio.sleep(3)
-        await self.next_turn()
-
 
 
 def setup(client):
     client.add_cog(TestGameCog(client))
-
-

@@ -7,8 +7,8 @@ import nextcord as discord
 import json
 import emoji
 from utils.lobbyutil.Inventory import Inventory
-from utils.lobbyutil.lobbycog import LobbyCog, HelpCategory, Game, AdminView
-from utils.lobbyutil.teamutil import TeamLobby, TeamPlayer, Team, MockPlayer
+from utils.lobbyutil.lobbycog import LobbyCog, HelpCategory, Game
+from utils.lobbyutil.teamutil import TeamLobby, TeamPlayer, Team, MockPlayer, TeamAdminView
 from utils.lobbyutil import Colored
 
 
@@ -17,7 +17,6 @@ class CodenamesCog(LobbyCog):
 
         super().__init__(client, "Codenames", minplayers=4, gameclass=CodenamesGame, playerclass=TeamPlayer, lobbyclass=CodenamesLobby)
         self.client = client
-        self.teams = sorted([Team(col) for col in Colored.Colored.list().values()], key=lambda t: t.color.emoji_square)
 
         self.credits = """The game is based on the tabletop board game **Codenames** by Czech Games Edition
                 https://czechgames.com/en/codenames/
@@ -49,7 +48,7 @@ class CodenamesCog(LobbyCog):
             The clue may be for example (Apple, 2) for the words: "pie" and "tree". """))
 
 
-class CodenamesMngmntView(AdminView):
+class CodenamesMngmntView(TeamAdminView):
     def __init__(self, lobby: "CodenamesLobby"):
         super().__init__(lobby)
         for i in self.children:  # type: discord.ui.Button
@@ -134,16 +133,6 @@ If you wish to be the spymaster, repick your own team to be placed at the end.""
 
         return EmbedVar
 
-    def readyCondition(self):
-        readys = [i.is_ready() for i in self.players]
-        teams = [t for t in self.teams if t]  # remove empty teams
-        if (all(readys)  # everyone is ready
-                and len(self.players) >= self.minplayers  # enough players
-                and all([len(t.players) >= t.minplayers for t in teams])  # enough players in each team
-                and len(teams) >= 2):  # enough teams
-            return True
-        return False
-
 
 class Word:
     def __init__(self, word: str, team: Team, is_mobile: bool):
@@ -185,10 +174,10 @@ class CodenamesGame(Game):
             team.guesser = team.players[0]
             team.spymaster = team.players[-1]
 
-        self.assasin = Word(allwords.pop(), Team(Colored.Colored.black), self.lobby.mobile)
+        self.assasin = Word(allwords.pop(), Team.from_color(Colored.Colored.black), self.lobby.mobile)
         self.words.append(self.assasin)
 
-        self.neutrals = [Word(w, Team(Colored.Colored.white), self.lobby.mobile) for w in allwords]
+        self.neutrals = [Word(w, Team.from_color(Colored.Colored.white), self.lobby.mobile) for w in allwords]
         self.words.extend(self.neutrals)
 
         random.shuffle(self.words)
@@ -254,7 +243,7 @@ class CodenamesGame(Game):
     class WordPicker(discord.ui.StringSelect):
         def __init__(self, game: "CodenamesGame", guesser: TeamPlayer):
             super().__init__(min_values=1, max_values=25)
-            self.logger = game.lobby.cog.client.logger
+            self.logger = game.lobby.logger
             self.game = game
             self.guesser = guesser
             self.options = [discord.SelectOption(label=str(w), value=str(n)) if not w.revealed else discord.SelectOption(label="Revealed", value=str(n), emoji=emoji.emojize(":cross_mark:", language="alias")) for n, w in enumerate(self.game.words)]
@@ -323,7 +312,7 @@ class CodenamesGame(Game):
         for p in self.lobby.players:
             p.statistics["Games played"] += 1
 
-        self.lobby.cog.savePlayers()
+        self.savePlayers()
 
         viewObj = self.ReturnToLobby(self, self.msg)
         await self.msg.edit(embed=discord.Embed(title=f"Team {winner.name} won!",

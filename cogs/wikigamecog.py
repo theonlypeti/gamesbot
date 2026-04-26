@@ -14,7 +14,6 @@ root = os.getcwd()
 class WikiGameCog(LobbyCog):
     def __init__(self, client: discord.Client):
         super().__init__(client, "Two of these people are lying", BASE_CMD_NAME="wikigame", minplayers=3, playerclass=WordsPlayer, lobbyclass=WordsLobby, gameclass=WikiGame)
-        self.client = client
 
         self.rules = """Before starting the game, everyone picks a few interesting wikipedia articles that are less known.
         The wikipedia's [__Random article__](https://en.wikipedia.org/wiki/Special:Random) button may be used but the articles may be less interesting.
@@ -64,12 +63,12 @@ class WordsPlayer(Player):
     def __str__(self):
         return f"{self.name} ({len(self.words)} words)"
 
-    async def can_ready(self, interaction: discord.Interaction, lobby: WordsLobby) -> bool:
-        if len(self.words) >= lobby.minwords or self.ready:
-            return True
+    def can_ready(self, lobby: WordsLobby):
+        if len(self.words) >= lobby.minwords:
+            return True, ""
         else:
-            await embedutil.error(interaction, f"You need to submit at least {lobby.minwords} words to be ready.")
-            return False
+            reason = f"You need to submit at least {lobby.minwords} words."
+            return False, reason
 
 
 class WordsLobby(Lobby):
@@ -196,7 +195,7 @@ class GuesserDropdown(discord.ui.Select):
             await interaction.edit(embed=embedVar, view=self.NextButton(self.game))
         else:
             await embedutil.error(interaction, "It is not your turn to guess!")
-        self.game.lobby.cog.savePlayers()
+        self.game.savePlayers()
 
     class NextButton(discord.ui.View):
         def __init__(self, game: WikiGame):

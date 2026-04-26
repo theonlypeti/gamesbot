@@ -12,9 +12,10 @@ class MyLogger(logging.Logger):
 
     @classmethod
     def addLevel(cls, name, lvl, style):
+        """Don't forget to call self.install() afterwards if you wish to add colored levels after mylogger.init()"""
         setattr(cls, name.lower(), partialmethod(cls._anyLog, lvl))
         logging.addLevelName(lvl, name)
-        coloredlogs.DEFAULT_LEVEL_STYLES.update({name: style})
+        coloredlogs.DEFAULT_LEVEL_STYLES.update({name.lower(): style})
 
     def _anyLog(self, level, message, *args, **kwargs):
         if self.isEnabledFor(level):
@@ -24,7 +25,15 @@ class MyLogger(logging.Logger):
         if self.isEnabledFor(logging.INFO):
             self._log(logging.INFO, message, args, **kwargs)
 
-
+    def install(self):
+        """if you wish to add more colored levels, call this after calling logger.addLevel()"""
+        for handler in self.handlers:
+            # Check if the handler is using a coloredlogs formatter
+            if hasattr(handler, 'formatter') and isinstance(handler.formatter, coloredlogs.ColoredFormatter):
+                # Inject the updated styles directly into the existing formatter
+                handler.formatter.level_styles = coloredlogs.DEFAULT_LEVEL_STYLES
+                handler.formatter.field_styles = coloredlogs.DEFAULT_FIELD_STYLES
+                
 # formatting the colorlogger
 fmt = "[ %(asctime)s %(name)s (%(filename)s) %(lineno)d %(funcName)s() %(levelname)s ] %(message)s"
 coloredlogs.DEFAULT_FIELD_STYLES = {'asctime': {'color': 100}, 'lineno': {'color': 'magenta'}, 'levelname': {'bold': True, 'color': 'black'}, 'filename': {'color': 25}, 'name': {'color': 'blue'}, 'funcname': {'color': 'cyan'}}
@@ -60,8 +69,8 @@ def init(args=None):
             pass
         fl = WatchedFileHandler(filename, encoding="utf-8") #not for windows but if i ever switch to linux
         fl.setFormatter(formatter)
-        fl.setLevel(logging.DEBUG)
-        fl.addFilter(lambda rec: rec.levelno == 25)
+        fl.setLevel(25)
+        # fl.addFilter(lambda rec: rec.levelno == 25)
         baselogger.addHandler(fl)
 
     baselogger.setLevel(logging.DEBUG)  # base is debug, so the file handler could catch debug msgs too

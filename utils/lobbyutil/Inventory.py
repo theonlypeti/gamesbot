@@ -1,7 +1,7 @@
-from typing import Coroutine, Callable
+from typing import Coroutine, Callable, MutableSequence, Literal
 import emoji
 import nextcord as discord
-from utils import embedutil
+from nextcord.ui import Item
 from utils.antimakkcen import antimakkcen
 from utils.paginator import Paginator
 
@@ -16,7 +16,7 @@ class Inventory(Paginator):
     MODAL_TITLE = "Add a word"
     DUPLICATE = "This word is already submitted by someone! ({})"
 
-    def __init__(self, items: list = None, on_update: Callable[[], Coroutine] = None, **kwargs):
+    def __init__(self, items: MutableSequence|MutableSequence[MutableSequence], on_update: Callable[[], Coroutine] = None, **kwargs):
         super().__init__(
             func=lambda pagi:
             discord.Embed(
@@ -28,6 +28,7 @@ class Inventory(Paginator):
             itemsOnPage=25)
 
         self.mergeview(AddWordView(self))
+        self.buttons: dict[Literal["select","left","right","add","clear"],Item] = {k:v for k,v in zip(("select","left","right","add","clear"), self.children)}
         self.on_update = on_update
         self._inv_to_check = None
         for k, v in kwargs.items():
@@ -71,11 +72,12 @@ class AddWordModal(discord.ui.Modal):
         self.add_item(self.input)
 
     async def callback(self, interaction: discord.Interaction):
+        self.pagi.err = ""
         for w in self.input.value.split(","):
             if await self.can_add(interaction, w):
                 self.pagi.inv.append(w.strip())
             else:
-                return
+                continue
 
         await self.pagi.render(interaction)
         if self.pagi.on_update:
@@ -90,13 +92,19 @@ class AddWordModal(discord.ui.Modal):
         if antimakkcen(w.strip().lower()) not in map(str.lower, map(antimakkcen, inv_to_check)): #TODO cache?
             return True
         else:
-            await embedutil.error(interaction, self.pagi.DUPLICATE.format(w))
+            # await embedutil.error(interaction, self.pagi.DUPLICATE.format(w))
+            self.pagi.err += self.pagi.DUPLICATE.format(w) + "\n"
             return False
 
     async def is_appropriate(self, interaction, w):
-        return True
+        if bool(w):
+            return True
+        else:
+            # await embedutil.error(interaction, "Unable to add empty word.")
+            self.pagi.err += "Unable to add empty word." + "\n"
+            return False
 
-class RemoveWordSelect(discord.ui.Select):
+class RemoveWordSelect(discord.ui.Select): #TODO this crashes if item is accidentally 0 chars long
     def __init__(self, pagi: Inventory):
         super().__init__(min_values=1, max_values=max(1, len(pagi.slice_inventory())),
                          placeholder=pagi.SEL_PLACEHOLDER,

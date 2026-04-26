@@ -138,7 +138,10 @@ class Timer:
     async def mock_start(self, timer: "Timer", interaction: discord.Interaction):
         """Example function that runs when the timer was started by an user. Supply your own function to run on start"""
         game: Game = timer.game
-        await game.channel.send(f"Timer started by {self.started_by.mention}!", delete_after=5)
+        if self.started_by:
+            await game.channel.send(f"Timer started by {self.started_by.mention}!", delete_after=5)
+        else:
+            await game.channel.send(f"Timer started!", delete_after=5)
         # await game.next_turn()
 
     def get_embed(self):
@@ -197,4 +200,7 @@ class Timer:
             await self._future
         if self.stopped:
             return False
-        return True
+        if self.started_at:
+            return True
+        else:
+            raise RuntimeError("Timer was never started.")

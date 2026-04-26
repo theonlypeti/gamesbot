@@ -5,21 +5,24 @@ import nextcord as discord
 from nextcord import Object
 import utils.embedutil
 from utils.lobbyutil import Colored
-from utils.lobbyutil.lobbycog import LobbyCog, Player, Lobby, Game, LobbyView, PlayerProt
-
+from utils.lobbyutil.lobbycog import LobbyCog, Player, Lobby, Game, LobbyView, PlayerProt, AdminView
 
 class Team:
-    def __init__(self, color: Colored.ColorGroup):
-        self.players: list[PlayerProt] = []
+    def __init__(self, name: str, emoji: str, color: Colored.ColorGroup|None, minplayers=2, maxplayers=25):
         self.color: Colored.ColorGroup = color
-        self.minplayers: int = 2
-        self.eliminated = False
+        self.name = name or color.name.title()
+        self.emoji = emoji if emoji else color.emoji_square
+        self.minplayers: int = minplayers
+        self.maxplayers: int = maxplayers
+
+        self.players: list[PlayerProt] = []
+        self.eliminated = False #debating whether to keep it
         #self.points = 0
         #self.words = []
 
-    @property
-    def name(self):
-        return self.color.name
+    @classmethod
+    def from_color(cls, color: Colored.ColorGroup, minplayers: int=2, maxplayers: int=None):
+        return Team(name="Team " + color.name.lower(), emoji=color.emoji_square, color=color, minplayers=minplayers, maxplayers=maxplayers)
 
     def join(self, player: PlayerProt):
         if player.team:
@@ -66,7 +69,7 @@ class TeamSelector(discord.ui.Select):
         self.lobby = lobby
         self.cog = lobby.cog
         self.teams = self.lobby.teams
-        self.opts = [discord.SelectOption(label=team.name, value=str(n), emoji=team.color.emoji_square) for n, team in enumerate(self.teams)]
+        self.opts = [discord.SelectOption(label=team.name, value=str(n), emoji=team.emoji) for n, team in enumerate(self.teams)]
         super().__init__(placeholder="Pick a team", options=self.opts)
 
     async def callback(self, inter: discord.Interaction):
@@ -74,11 +77,39 @@ class TeamSelector(discord.ui.Select):
         player = self.cog.getPlayer(inter.user)
         team.join(player)
         await self.lobby.readyCheck()
-        embedVar = discord.Embed(description=f"You have joined team {team.name}", color=team.color.dccolor)
+        embedVar = discord.Embed(description=f"You have joined team {team.name}", color=team.color.dccolor if team.color else discord.Color.green())
         await inter.edit(view=None, content=None, embed=embedVar, delete_after=5.0)
 
 
-class TeamLobby(Lobby): #TODO add randomize teams button //but i dont know how many teams to randomize into, only if i have minplayers and maxplayers for teams
+class TeamAdminView(AdminView):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+    @discord.ui.button(label="Randomize teams", style=discord.ButtonStyle.grey, emoji=emoji.emojize(":twisted_rightwards_arrows:", language="alias"))
+    async def randomize_teams(self, button: discord.ui.Button, interaction: discord.Interaction):
+        """Randomize teams."""
+        lobby: TeamLobby = self.lobby
+        if len(lobby.players) < lobby.minteams * lobby.teams[0].minplayers:
+            await utils.embedutil.error(interaction, "Not enough players to randomize teams.")
+            return
+
+        # clear current teams
+        for team in lobby.teams:
+            for player in team.players[:]:  # copy the list to avoid modification during iteration
+                team.remove(player)
+
+        # shuffle players and assign to teams
+        players = lobby.players[:]
+        random.shuffle(players)
+        for i, player in enumerate(players):
+            team = lobby.teams[i % lobby.minteams]
+            team.join(player)
+
+        await lobby.readyCheck()
+        await lobby.messageid.channel.send(embed=discord.Embed(title="Teams randomized!", description="The teams have been randomized by the lobby leader.", color=discord.Color.green()), delete_after=6)
+
+
+class TeamLobby(Lobby):
     """Lobby with extended team support. Players must join a team to ready up. Be aware empty teams are not removed on game start!
 
     New notable attributes:
@@ -88,35 +119,54 @@ class TeamLobby(Lobby): #TODO add randomize teams button //but i dont know how m
     """
     teams_info_text = "Pick a team"
 
-    def __init__(self, interaction: discord.Interaction, cog: LobbyCog, private=False, adminView: discord.ui.View = None, game: type[Game] = None, minplayers: int = None, maxplayers: int = None, teamclass: type[Team] = None):
+    def __init__(self, interaction: discord.Interaction, cog: LobbyCog, private=False,
+                 lobbyView: type[LobbyView] = None,
+                 adminView: discord.ui.View = TeamAdminView,
+                 game: type[Game] = None,
+                 minplayers: int = None, maxplayers: int = None,
+                 teamclass: type[Team] = None,
+                 minteams: int = None, maxteams: int = None):
         self.cog = cog
         self.teamclass = teamclass or Team
-        self.teamcolors = ["red", "blue", "green", "yellow"] #Colored.Colored.list() to get all available color names
+        if not getattr(self, "teamcolors", None):  # allow overriding teamcolors by setting it as a class attribute, otherwise use default
+            self.teamcolors = ["red", "blue", "green", "yellow"] #Colored.Colored.list() to get all available color names
         self.teams: list[Team] = self.init_teams(self.teamcolors)
+        self.minteams = minteams or 2
+        self.maxteams = maxteams or len(self.teams)
+        assert self.minteams > 1, "Minimum teams must be at least 2"
+        assert self.maxteams >= self.minteams, "Maximum teams cannot be less than minimum teams"
 
-        TeamView = type('TeamView', (LobbyView,), {'middlebutton': TeamsButton})  # type: type[LobbyView] #this is so hacky
-        TeamView.middlebutton.teams_info_text = self.teams_info_text  # needed cuz it would overwrite for other games as well #TODO this should be better
+        if not lobbyView:
+            TeamView = type('TeamView', (LobbyView,), {'middlebutton': TeamsButton})  # type: type[LobbyView] #this is so hacky
+            TeamView.middlebutton.teams_info_text = self.teams_info_text  # needed cuz it would overwrite for other games as well #TODO this should be better
+            lobbyViewClass = TeamView
+        else:
+            lobbyViewClass = lobbyView
 
-        super().__init__(interaction, cog, private, lobbyView=TeamView, adminView=adminView, game=game, minplayers=minplayers, maxplayers=maxplayers)
+        super().__init__(interaction, cog, private, lobbyView=lobbyViewClass, adminView=adminView, game=game, minplayers=minplayers, maxplayers=maxplayers)
 
     def init_teams(self, teamcolors: list[str]) -> list[Team]:
-        """Limit teams to the 4 main colors and remove the rest."""
+        """By default, limit teams to the 4 main colors and remove the rest.
+        You may completely rewrite this, or even omit it completely, implement some custom logic to create teams,
+        e.g. based on roles or animals or countries, just make sure to set self.teams to a list of teamclass instances."""
+
         teams = []
         for c in teamcolors:
-            col = Colored.Colored.get_color(c)
-            team = self.teamclass(col)
+            try:
+                col = Colored.Colored.get_color(c)
+            except (TypeError, AttributeError):
+                self.cog.logger.error(f"Invalid color '{c}' in {self.__class__.__name__}.teamcolors, skipping this color. Valid colors are: {', '.join(Colored.Colored.list())}")
+                continue
+            team = self.teamclass.from_color(col)
             teams.append(team)
         return teams
-        #TODO document this how to manage Teams
 
     def readyCondition(self):
         """Teams specific check. Check if all players are ready, there are enough players, and each team has enough players."""
-        readys = [i.is_ready() for i in self.players]
         teams = [t for t in self.teams if t]  # remove empty teams
-        return (all(readys)  # everyone is ready
-                and len(self.players) >= self.minplayers  # enough players
-                and all([len(t.players) >= t.minplayers for t in teams])  # enough players in each team
-                and len(teams) >= 2)  # enough teams #TODO add minteams?
+        return (super().readyCondition() # enough players, all readied up
+                and all([t.maxplayers >= len(t.players) >= t.minplayers for t in teams])  # enough players in each team
+                and self.minteams <= len(teams) <= self.maxteams)  # enough teams
 
     def show_players(self, embedVar: discord.Embed) -> discord.Embed:
         i = 1
@@ -138,6 +188,17 @@ class TeamLobby(Lobby): #TODO add randomize teams button //but i dont know how m
             i += 1
         return embedVar
 
+    def show(self) -> discord.Embed:
+        emb = super().show()
+        maxteams = min(self.maxteams, len(self.teams))
+        if self.minteams == maxteams:
+            tmstxt = f"Split into {self.minteams} teams."
+        else:
+            tmstxt = f"Split into {self.minteams} to {maxteams} teams."
+        emb.description = emb.description + "\n\n**" + tmstxt + "**\n"
+        return emb
+
+
 
 class TeamPlayer(Player):
     """
@@ -151,36 +212,32 @@ class TeamPlayer(Player):
         super().__init__(discorduser)
         self.team: Team | None = None
 
-    def is_ready(self) -> bool:
-        """for internal use, for ux with feedback use can_ready()"""
-        return self.ready and self.team
-
-    async def can_ready(self, interaction: discord.Interaction, lobby: Lobby) -> bool:  # TODO why is can_ready in Player?
+    def can_ready(self, lobby: Lobby):
         """Check if the player can ready up, e.g. has enough words, has a team, etc.
-        :param interaction:
-        :param lobby:
+        :param lobby: The lobby the player is in, in case you need to check something about the lobby, e.g. other players, teams, etc.
         """
-        if self.team or self.ready:  # if has a team, or wants to unready even without a team (should not be possible)
-            return True
+        if self.team:
+            return True, ""
         else:
-            await utils.embedutil.error(interaction, "You may not ready without a team assigned")
-            return False
+            return False, "You may not ready without a team assigned"
 
     def __str__(self):
-        return f"{self.team_emoji} {self.name} {'(no team)' if not self.team else ''}"
+        return f"{self.team_emoji} {self.name} ({self.team_name})"
 
     @property
     def team_emoji(self):
-        return self.team.color.emoji_square if self.team else emoji.emojize(':question_mark:', language='alias')
+        """A null-safe way to get the player's team emoji without needing to check if they are in a team first."""
+        return self.team.emoji if self.team else emoji.emojize(':question_mark:', language='alias')
 
     @property
     def team_name(self):
+        """A null-safe way to get the player's team name without needing to check if they are in a team first."""
         return self.team.name if self.team else "No team"
 
 
 class MockPlayer(TeamPlayer):
     def __init__(self, name: str, cog):
-        super().__init__(Object(id=random.randrange(100_000_000, 999_999_999))) #todo this will not work. why?
+        super().__init__(Object(id=random.randrange(100_000_000, 999_999_999)))
         self._name = name
         self.cog = cog
         cog.users.update({self.userid: self})
@@ -198,6 +255,12 @@ class MockPlayer(TeamPlayer):
     def user(self):
         self.cog.logger.warning("MockPlayer.user accessed, returning bot client's profile so stuff doesn't crash! (please don't DM haha)")
         return self.cog.client.user
+
+    def can_ready(self, lobby: Lobby):
+        return True, ""  # always ready, no checks
+
+    def can_join(self, lobby: Lobby):
+        return True, ""  # can always join, no checks
 
     def __str__(self):
         return f"{self.team_emoji} {self.name} (MockPlayer)"
